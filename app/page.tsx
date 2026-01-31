@@ -30,6 +30,7 @@ export default function App() {
     router.replace("/auth")
   }
 
+  // Add test commit
   // Show loading state
   if (isLoading) {
     return (
