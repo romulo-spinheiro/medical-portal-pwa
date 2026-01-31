@@ -31,10 +31,10 @@ export function HomeScreen() {
     if (!name) return "?"
     const parts = name.trim().split(" ").filter(Boolean)
     if (parts.length === 1) return parts[0].charAt(0).toUpperCase()
-    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase()
+    return (parts[0].charAt(0) + (parts[parts.length - 1]?.charAt(0) || "")).toUpperCase()
   }
 
-  // Default to today
+  // Define o dia atual como padrão
   useEffect(() => {
     if (!selectedDay) {
       const today = new Date().toLocaleDateString('pt-BR', { weekday: 'long' })
@@ -47,28 +47,33 @@ export function HomeScreen() {
     }
   }, [])
 
-  // 1. BUSCA EXPLICITA DO NOME DO USUÁRIO NA TABELA PROFILES
+  // 1. BUSCA O NOME REAL DO USUÁRIO NA TABELA PROFILES OU METADADOS
   const fetchProfileData = useCallback(async () => {
     if (!user) return
     try {
+      // Prioridade 1: Tabela Profiles
       const { data, error } = await supabase
         .from('profiles')
         .select('full_name, avatar_url')
         .eq('id', user.id)
         .single()
 
-      if (data) {
-        setUserName(data.full_name || user.user_metadata?.full_name || null)
+      if (data && data.full_name) {
+        setUserName(data.full_name)
         setAvatarUrl(data.avatar_url || null)
       } else {
-        setUserName(user.user_metadata?.full_name || null)
+        // Fallback: Metadados do Auth (Google/Email)
+        const metadataName = user.user_metadata?.full_name || user.user_metadata?.name
+        setUserName(metadataName || null)
       }
     } catch (err) {
-      console.error("Profile load error:", err)
+      console.error("Erro ao carregar perfil:", err)
     }
   }, [user, supabase])
 
-  useEffect(() => { if (user) fetchProfileData() }, [user, fetchProfileData])
+  useEffect(() => {
+    if (user) fetchProfileData()
+  }, [user, fetchProfileData])
 
   const handleAvatarClick = () => { if (!isUploading) fileInputRef.current?.click() }
 
@@ -101,7 +106,7 @@ export function HomeScreen() {
     return "Boa noite"
   }
 
-  // Lógica de agrupamento e deduplicação
+  // Agrupamento e Deduplicação dos horários
   const groupedSchedules = useMemo(() => {
     const filtered = schedules.filter((s) => {
       const dayMatch = !selectedDay || s.day_of_week.toLowerCase() === selectedDay.toLowerCase()
@@ -142,7 +147,7 @@ export function HomeScreen() {
     <div className="min-h-screen pb-24">
       <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
 
-      {/* Header */}
+      {/* Header com Nome do Usuário */}
       <div className="sticky top-0 z-40 border-b border-white/40 bg-white/30 px-4 pb-4 pt-6 backdrop-blur-xl">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -202,7 +207,6 @@ export function HomeScreen() {
               className="w-full rounded-3xl border border-white/80 bg-white/60 p-5 shadow-lg shadow-gray-200/20 backdrop-blur-xl text-left transition-all hover:bg-white/90 active:scale-[0.99]"
             >
               <div className="flex gap-4">
-                {/* 2. AVATAR DO MÉDICO COM FALLBACK DE INICIAIS (RP) */}
                 <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#22c55e] to-[#16a34a] text-lg font-medium text-white shadow-md border-2 border-white/20 overflow-hidden">
                   {doctor.avatar_url && doctor.avatar_url.trim().length > 5 ? (
                     <img src={doctor.avatar_url} className="h-full w-full object-cover" alt={doctor.name} />
@@ -245,6 +249,7 @@ export function HomeScreen() {
         )}
       </div>
 
+      {/* Modal de Detalhes com Botão de WhatsApp Dinâmico */}
       <DoctorDetailsModal doctor={selectedDoctor} isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
     </div>
   )

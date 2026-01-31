@@ -23,7 +23,7 @@ export function DoctorDetailsModal({ doctor, isOpen, onClose }: DoctorDetailsMod
     // Filter schedules for this doctor
     const doctorSchedules = schedules.filter(s => s.doctor_id === doctor.id)
 
-    // Agrupamento Visual
+    // Agrupamento Visual para evitar duplicidade na lista de escalas
     const groupedSchedules = doctorSchedules.reduce((acc, curr) => {
         const key = `${curr.place_name}-${curr.neighborhood_id}-${curr.start_time}-${curr.end_time}`
         if (!acc[key]) {
@@ -54,11 +54,18 @@ export function DoctorDetailsModal({ doctor, isOpen, onClose }: DoctorDetailsMod
         }
     }
 
-    const handleWhatsApp = () => {
-        if (!doctor.phone) return
-        const cleanNumber = doctor.phone.replace(/\D/g, '')
+    // FUNÇÃO DINÂMICA DE LINK DO WHATSAPP
+    const getWhatsAppLink = (phone: string) => {
+        if (!phone) return ""
+        const cleanNumber = phone.replace(/\D/g, '')
+        // Adiciona 55 se o número tiver apenas 10 ou 11 dígitos (DDD + número)
         const finalNumber = cleanNumber.length <= 11 ? `55${cleanNumber}` : cleanNumber
-        window.open(`https://wa.me/${finalNumber}`, '_blank')
+        return `https://wa.me/${finalNumber}`
+    }
+
+    const handleWhatsApp = () => {
+        const link = getWhatsAppLink(doctor.phone)
+        if (link) window.open(link, '_blank')
     }
 
     const sortDays = (days: string[]) => {
@@ -76,8 +83,12 @@ export function DoctorDetailsModal({ doctor, isOpen, onClose }: DoctorDetailsMod
             <DialogContent className="max-h-[85vh] overflow-y-auto border-white/60 bg-white/95 backdrop-blur-2xl sm:max-w-md rounded-3xl p-6 shadow-2xl">
                 <DialogHeader>
                     <div className="flex items-center gap-5">
-                        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#22c55e] to-[#16a34a] text-2xl font-medium text-white shadow-xl border-4 border-white/20">
-                            {doctor.avatar_url || "?"}
+                        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#22c55e] to-[#16a34a] text-2xl font-medium text-white shadow-xl border-4 border-white/20 overflow-hidden">
+                            {doctor.avatar_url && doctor.avatar_url.length > 5 ? (
+                                <img src={doctor.avatar_url} className="h-full w-full object-cover" alt="" />
+                            ) : (
+                                <span>{doctor.name.charAt(0).toUpperCase()}</span>
+                            )}
                         </div>
                         <div className="space-y-0.5">
                             <DialogTitle className="text-xl font-medium text-gray-800 leading-tight">
@@ -105,7 +116,7 @@ export function DoctorDetailsModal({ doctor, isOpen, onClose }: DoctorDetailsMod
                     </div>
                 </DialogHeader>
 
-                {/* BOTÃO WHATSAPP */}
+                {/* BOTÃO WHATSAPP DINÂMICO */}
                 {doctor.phone && (
                     <div className="mt-8">
                         <button
