@@ -20,7 +20,7 @@ export function DoctorDetailsModal({ doctor, isOpen, onClose }: DoctorDetailsMod
 
     if (!doctor) return null
 
-    // Filter schedules
+    // Filter schedules for this doctor
     const doctorSchedules = schedules.filter(s => s.doctor_id === doctor.id)
 
     // Agrupamento Visual
@@ -54,7 +54,6 @@ export function DoctorDetailsModal({ doctor, isOpen, onClose }: DoctorDetailsMod
         }
     }
 
-    // WHATSAPP LÓGICA
     const handleWhatsApp = () => {
         if (!doctor.phone) return
         const cleanNumber = doctor.phone.replace(/\D/g, '')
@@ -74,22 +73,30 @@ export function DoctorDetailsModal({ doctor, isOpen, onClose }: DoctorDetailsMod
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="max-h-[90vh] overflow-y-auto border-white/60 bg-white/95 backdrop-blur-2xl sm:max-w-md rounded-3xl p-6 shadow-2xl">
+            <DialogContent className="max-h-[85vh] overflow-y-auto border-white/60 bg-white/95 backdrop-blur-2xl sm:max-w-md rounded-3xl p-6 shadow-2xl">
                 <DialogHeader>
                     <div className="flex items-center gap-5">
                         <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#22c55e] to-[#16a34a] text-2xl font-medium text-white shadow-xl border-4 border-white/20">
                             {doctor.avatar_url || "?"}
                         </div>
                         <div className="space-y-0.5">
-                            <DialogTitle className="text-xl font-medium text-gray-800 leading-tight">{doctor.name}</DialogTitle>
+                            <DialogTitle className="text-xl font-medium text-gray-800 leading-tight">
+                                {doctor.name}
+                            </DialogTitle>
                             <div className="flex flex-col gap-1">
                                 <span className="text-sm font-medium text-[#22c55e]">{doctor.specialty_name}</span>
                                 <div className="flex flex-wrap items-center gap-2 text-[10px] font-medium text-gray-400 uppercase tracking-widest">
-                                    <div className="flex items-center gap-1"><Contact className="h-3 w-3" /><span>CRM: {doctor.crm}</span></div>
+                                    <div className="flex items-center gap-1">
+                                        <Contact className="h-3 w-3" />
+                                        <span>CRM: {doctor.crm}</span>
+                                    </div>
                                     {doctor.phone && (
                                         <>
                                             <span className="text-gray-200">|</span>
-                                            <div className="flex items-center gap-1"><Phone className="h-3 w-3" /><span>{doctor.phone}</span></div>
+                                            <div className="flex items-center gap-1">
+                                                <Phone className="h-3 w-3" />
+                                                <span>{doctor.phone}</span>
+                                            </div>
                                         </>
                                     )}
                                 </div>
@@ -106,7 +113,7 @@ export function DoctorDetailsModal({ doctor, isOpen, onClose }: DoctorDetailsMod
                             className="flex w-full items-center justify-center gap-3 rounded-2xl bg-[#22c55e] py-4 text-sm font-medium text-white shadow-lg shadow-[#22c55e]/20 active:scale-95 transition-all"
                         >
                             <MessageCircle className="h-5 w-5" />
-                            Iniciar Conversa no WhatsApp
+                            Conversar no WhatsApp
                         </button>
                     </div>
                 )}
@@ -124,9 +131,16 @@ export function DoctorDetailsModal({ doctor, isOpen, onClose }: DoctorDetailsMod
                                     </div>
                                 </div>
                                 <div className="mt-4 flex flex-col gap-3">
-                                    <div className="flex items-center gap-2 text-xs font-medium text-gray-600"><Clock className="h-3.5 w-3.5 text-[#22c55e]" /><span>{item.start_time.slice(0, 5)} — {item.end_time.slice(0, 5)}</span></div>
+                                    <div className="flex items-center gap-2 text-xs font-medium text-gray-600">
+                                        <Clock className="h-3.5 w-3.5 text-[#22c55e]" />
+                                        <span>{item.start_time.slice(0, 5)} — {item.end_time.slice(0, 5)}</span>
+                                    </div>
                                     <div className="flex flex-wrap gap-1.5">
-                                        {sortDays(item.days).map(day => (<span key={day} className="rounded-lg bg-gray-50 border border-gray-100 px-2 py-1 text-[9px] font-medium uppercase text-gray-500">{getShortDay(day)}</span>))}
+                                        {sortDays(item.days).map(day => (
+                                            <span key={day} className="rounded-lg bg-gray-50 border border-gray-100 px-2 py-1 text-[9px] font-medium uppercase text-gray-500">
+                                                {getShortDay(day)}
+                                            </span>
+                                        ))}
                                     </div>
                                 </div>
                             </div>
@@ -136,15 +150,23 @@ export function DoctorDetailsModal({ doctor, isOpen, onClose }: DoctorDetailsMod
 
                 {!showDeleteConfirm ? (
                     <DialogFooter className="mt-8 flex-row gap-3">
-                        <Button variant="outline" onClick={handleEditClick} className="flex-1 rounded-2xl h-12 border-gray-100 bg-white/60 font-medium text-gray-600"><Pencil className="mr-2 h-4 w-4" />Editar</Button>
-                        <Button variant="destructive" onClick={() => setShowDeleteConfirm(true)} className="flex-1 rounded-2xl h-12 bg-red-50 text-red-500 border-none font-medium hover:bg-red-100"><Trash2 className="mr-2 h-4 w-4" />Excluir</Button>
+                        <Button variant="outline" onClick={handleEditClick} className="flex-1 rounded-2xl h-12 border-gray-100 bg-white/60 font-medium text-gray-600">
+                            <Pencil className="mr-2 h-4 w-4" />
+                            Editar
+                        </Button>
+                        <Button variant="destructive" onClick={() => setShowDeleteConfirm(true)} className="flex-1 rounded-2xl h-12 bg-red-50 text-red-500 border-none font-medium hover:bg-red-100">
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Excluir
+                        </Button>
                     </DialogFooter>
                 ) : (
                     <div className="mt-6 rounded-2xl border border-red-100 bg-red-50/50 p-5 backdrop-blur-sm animate-in zoom-in">
                         <p className="text-center text-xs font-medium text-red-800">Deseja excluir este médico permanentemente?</p>
                         <div className="mt-4 flex gap-3">
                             <Button variant="outline" className="flex-1 h-10 rounded-xl" onClick={() => setShowDeleteConfirm(false)} disabled={isDeleting}>Cancelar</Button>
-                            <Button variant="destructive" className="flex-1 h-10 rounded-xl shadow-lg shadow-red-200" onClick={handleConfirmDelete} disabled={isDeleting}>{isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sim, excluir"}</Button>
+                            <Button variant="destructive" className="flex-1 h-10 rounded-xl shadow-lg shadow-red-200" onClick={handleConfirmDelete} disabled={isDeleting}>
+                                {isDeleting ? <Loader2 className="h-4 w-4 animate-spin text-white" /> : "Sim, excluir"}
+                            </Button>
                         </div>
                     </div>
                 )}
