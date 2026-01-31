@@ -98,8 +98,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!error && data) {
         setProfile({
           id: data.id,
-          name: data.name,
-          avatar: data.avatar,
+          name: data.full_name || data.name || "Usuário",
+          avatar: data.avatar || (data.full_name ? data.full_name[0] : "?"),
           avatar_url: data.avatar_url,
         })
       } else {
@@ -172,7 +172,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }))
         setDoctors(mappedDoctors)
 
-        // Load schedules for these doctors with neighborhood name joined
+        // Load schedules   r these doctors with neighborhood name joined
         const doctorIds = mappedDoctors.map((d) => d.id)
         if (doctorIds.length > 0) {
           const { data: schedulesData, error: schedulesError } = await supabase

@@ -4,15 +4,20 @@
   "description": "Portal Médico - Gerencie seus médicos e roteiros",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#dcfce7",
+  "background_color": "#ffffff",
   "theme_color": "#22c55e",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/icon-512x512.jpg",
+      "src": "/icon-512x512.png",
       "sizes": "512x512",
-      "type": "image/jpeg",
+      "type": "image/png",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
     }
   ]
 }

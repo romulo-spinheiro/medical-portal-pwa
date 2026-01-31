@@ -1,6 +1,6 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { MapPin, Clock, Phone, Pencil, Trash2, Loader2 } from "lucide-react"
+import { MapPin, Clock, Phone, Pencil, Trash2, Loader2, Contact, MessageCircle } from "lucide-react"
 import { Doctor, Schedule } from "@/context/app-context"
 import { useApp } from "@/context/app-context"
 import { useState } from "react"
@@ -23,16 +23,11 @@ export function DoctorDetailsModal({ doctor, isOpen, onClose }: DoctorDetailsMod
     // Filter schedules for this doctor
     const doctorSchedules = schedules.filter(s => s.doctor_id === doctor.id)
 
-    // Group schedules logic
+    // Agrupamento Visual: Group by place, neighborhood and time
     const groupedSchedules = doctorSchedules.reduce((acc, curr) => {
-        // Create a unique key based on place, neighborhood and time
         const key = `${curr.place_name}-${curr.neighborhood_id}-${curr.start_time}-${curr.end_time}`
-
         if (!acc[key]) {
-            acc[key] = {
-                ...curr,
-                days: [curr.day_of_week]
-            }
+            acc[key] = { ...curr, days: [curr.day_of_week] }
         } else {
             if (!acc[key].days.includes(curr.day_of_week)) {
                 acc[key].days.push(curr.day_of_week)
@@ -48,112 +43,94 @@ export function DoctorDetailsModal({ doctor, isOpen, onClose }: DoctorDetailsMod
         router.push(`/cadastro?id=${doctor.id}`)
     }
 
-    const handleDeleteClick = () => {
-        setShowDeleteConfirm(true)
-    }
-
     const handleConfirmDelete = async () => {
         setIsDeleting(true)
         try {
             const result = await deleteDoctor(doctor.id)
-            if (result.error) {
-                alert("Erro ao excluir médico: " + result.error)
-            } else {
-                onClose()
-            }
-        } catch (err) {
-            alert("Erro ao excluir médico")
+            if (result.error) alert(result.error)
+            else onClose()
         } finally {
             setIsDeleting(false)
         }
     }
 
-    // Helper to sort and format days
-    const formatDays = (days: string[]) => {
-        const dayOrder = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
-        const sorted = days.sort((a, b) => {
-            return dayOrder.indexOf(a.toLowerCase()) - dayOrder.indexOf(b.toLowerCase())
-        })
-
-        // Map to short names
-        const shortNames: Record<string, string> = {
-            "segunda": "Seg",
-            "terça": "Ter",
-            "quarta": "Qua",
-            "quinta": "Qui",
-            "sexta": "Sex",
-            "sábado": "Sáb",
-            "domingo": "Dom"
-        }
-
-        return sorted.map(d => shortNames[d.toLowerCase()] || d).join(", ")
+    // WHATSAPP INTEGRATION
+    const handleOpenWhatsApp = () => {
+        if (!doctor.phone) return
+        const cleanNumber = doctor.phone.replace(/\D/g, '')
+        const finalNumber = cleanNumber.length <= 11 ? `55${cleanNumber}` : cleanNumber
+        window.open(`https://wa.me/${finalNumber}`, '_blank')
     }
 
-    // Remove seconds from time
-    const formatTime = (time: string) => {
-        return time.slice(0, 5)
+    const sortDays = (days: string[]) => {
+        const dayOrder = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
+        return days.sort((a, b) => dayOrder.indexOf(a.toLowerCase()) - dayOrder.indexOf(b.toLowerCase()))
+    }
+
+    const getShortDay = (day: string) => {
+        const shortNames: Record<string, string> = { "segunda": "Seg", "terça": "Ter", "quarta": "Qua", "quinta": "Qui", "sexta": "Sex", "sábado": "Sáb", "domingo": "Dom" }
+        return shortNames[day.toLowerCase()] || day
     }
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="max-h-[90vh] overflow-y-auto border-white/60 bg-white/90 backdrop-blur-xl sm:max-w-md">
+            <DialogContent className="max-h-[85vh] overflow-y-auto border-white/60 bg-white/95 backdrop-blur-2xl sm:max-w-md rounded-3xl p-6 shadow-2xl">
                 <DialogHeader>
-                    <div className="flex items-center gap-4">
-                        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#22c55e] to-[#16a34a] text-2xl font-bold text-white shadow-lg">
+                    <div className="flex items-center gap-5">
+                        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#22c55e] to-[#16a34a] text-2xl font-medium text-white shadow-xl border-4 border-white/20">
                             {doctor.avatar_url || "?"}
                         </div>
-                        <div>
-                            <DialogTitle className="text-xl text-gray-800">
-                                {doctor.name}
-                            </DialogTitle>
-                            <DialogDescription className="mt-1 flex flex-col gap-1">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-[#22c55e]">{doctor.specialty_name}</span>
-                                    <span className="text-gray-300">|</span>
-                                    <span className="text-gray-500">CRM: {doctor.crm}</span>
+                        <div className="space-y-0.5">
+                            <DialogTitle className="text-xl font-medium text-gray-800 leading-tight">{doctor.name}</DialogTitle>
+                            <div className="flex flex-col gap-1">
+                                <span className="text-sm font-medium text-[#22c55e]">{doctor.specialty_name}</span>
+                                <div className="flex flex-wrap items-center gap-2 text-[10px] font-medium text-gray-400 uppercase tracking-widest">
+                                    <div className="flex items-center gap-1"><Contact className="h-3 w-3" /><span>CRM: {doctor.crm}</span></div>
+                                    {doctor.phone && (
+                                        <>
+                                            <span className="text-gray-200">|</span>
+                                            <div className="flex items-center gap-1"><Phone className="h-3 w-3" /><span>{doctor.phone}</span></div>
+                                        </>
+                                    )}
                                 </div>
-                                {doctor.phone && (
-                                    <div className="flex items-center gap-1.5 text-sm text-gray-500">
-                                        <Phone className="h-3.5 w-3.5" />
-                                        <span>{doctor.phone}</span>
-                                    </div>
-                                )}
-                            </DialogDescription>
+                            </div>
                         </div>
                     </div>
                 </DialogHeader>
 
-                {/* Schedules */}
-                <div className="mt-4">
-                    <h4 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">
-                        Locais de Atendimento
-                    </h4>
+                {/* WHATSAPP ACTION */}
+                {doctor.phone && (
+                    <div className="mt-8">
+                        <button
+                            onClick={handleOpenWhatsApp}
+                            className="flex w-full items-center justify-center gap-3 rounded-2xl bg-[#22c55e] py-4 text-sm font-medium text-white shadow-lg shadow-[#22c55e]/20 active:scale-95 transition-all"
+                        >
+                            <MessageCircle className="h-5 w-5" />
+                            Conversar no WhatsApp
+                        </button>
+                    </div>
+                )}
 
+                <div className="mt-8">
+                    <h4 className="mb-4 text-[10px] font-medium uppercase tracking-widest text-gray-400">Escala de Atendimento</h4>
                     {groupedList.length === 0 ? (
-                        <p className="rounded-xl bg-gray-50 p-4 text-center text-sm text-gray-400">
-                            Nenhum local cadastrado
-                        </p>
+                        <div className="rounded-2xl border border-dashed border-gray-100 bg-white/40 p-8 text-center"><p className="text-xs text-gray-400 font-medium">Nenhum local cadastrado</p></div>
                     ) : (
-                        <div className="space-y-3">
+                        <div className="space-y-4">
                             {groupedList.map((item, index) => (
-                                <div
-                                    key={index}
-                                    className="rounded-xl border border-gray-100 bg-gray-50/50 p-3"
-                                >
-                                    <div className="flex items-start gap-2">
-                                        <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#22c55e]" />
+                                <div key={index} className="rounded-2xl border border-white/80 bg-white/60 p-4 shadow-sm backdrop-blur-sm">
+                                    <div className="flex items-start gap-3">
+                                        <div className="mt-0.5 rounded-full bg-[#22c55e]/10 p-2 text-[#22c55e]"><MapPin className="h-3.5 w-3.5" /></div>
                                         <div className="flex-1">
-                                            <p className="font-medium text-gray-700">{item.place_name}</p>
-                                            <p className="text-sm text-gray-500">{item.neighborhood_name || "Sem bairro"}</p>
+                                            <p className="text-sm font-medium text-gray-800">{item.place_name}</p>
+                                            <p className="text-[10px] font-medium text-gray-400 uppercase tracking-widest">{item.neighborhood_name || "Sem bairro"}</p>
                                         </div>
                                     </div>
-                                    <div className="mt-2 flex items-center gap-2 text-sm text-gray-500">
-                                        <Clock className="h-4 w-4 text-gray-400" />
-                                        <span className="font-medium text-gray-700">
-                                            {formatTime(item.start_time)} - {formatTime(item.end_time)}
-                                        </span>
-                                        <span className="text-gray-300">|</span>
-                                        <span className="capitalize">{formatDays(item.days)}</span>
+                                    <div className="mt-4 flex flex-col gap-3">
+                                        <div className="flex items-center gap-2 text-xs font-medium text-gray-600"><Clock className="h-3.5 w-3.5 text-[#22c55e]" /><span>{item.start_time.slice(0, 5)} — {item.end_time.slice(0, 5)}</span></div>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {sortDays(item.days).map(day => (<span key={day} className="rounded-lg bg-gray-50 border border-gray-100 px-2 py-1 text-[9px] font-medium uppercase text-gray-500">{getShortDay(day)}</span>))}
+                                        </div>
                                     </div>
                                 </div>
                             ))}
@@ -161,59 +138,20 @@ export function DoctorDetailsModal({ doctor, isOpen, onClose }: DoctorDetailsMod
                     )}
                 </div>
 
-                {/* Delete Confirmation */}
-                {showDeleteConfirm && (
-                    <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4">
-                        <p className="text-center text-sm text-red-700">
-                            Tem certeza que deseja excluir este médico? Esta ação não pode ser desfeita.
-                        </p>
-                        <div className="mt-3 flex justify-center gap-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setShowDeleteConfirm(false)}
-                                disabled={isDeleting}
-                            >
-                                Cancelar
-                            </Button>
-                            <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={handleConfirmDelete}
-                                disabled={isDeleting}
-                            >
-                                {isDeleting ? (
-                                    <>
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Excluindo...
-                                    </>
-                                ) : (
-                                    "Sim, excluir"
-                                )}
-                            </Button>
+                {!showDeleteConfirm ? (
+                    <DialogFooter className="mt-8 flex-row gap-3">
+                        <Button variant="outline" onClick={handleEditClick} className="flex-1 rounded-2xl h-12 border-gray-100 bg-white/60 font-medium text-gray-600"><Pencil className="mr-2 h-4 w-4" />Editar</Button>
+                        <Button variant="destructive" onClick={() => setShowDeleteConfirm(true)} className="flex-1 rounded-2xl h-12 bg-red-50 text-red-500 border-none font-medium hover:bg-red-100"><Trash2 className="mr-2 h-4 w-4" />Excluir</Button>
+                    </DialogFooter>
+                ) : (
+                    <div className="mt-6 rounded-2xl border border-red-100 bg-red-50/50 p-5 backdrop-blur-sm animate-in zoom-in">
+                        <p className="text-center text-xs font-medium text-red-800">Deseja excluir este médico permanentemente?</p>
+                        <div className="mt-4 flex gap-3">
+                            <Button variant="outline" className="flex-1 h-10 rounded-xl" onClick={() => setShowDeleteConfirm(false)} disabled={isDeleting}>Cancelar</Button>
+                            <Button variant="destructive" className="flex-1 h-10 rounded-xl shadow-lg shadow-red-200" onClick={handleConfirmDelete} disabled={isDeleting}>{isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sim, excluir"}</Button>
                         </div>
                     </div>
                 )}
-
-                <DialogFooter className="mt-4 flex-row gap-2 sm:justify-between">
-                    <Button
-                        variant="outline"
-                        onClick={handleEditClick}
-                        className="flex-1 bg-transparent"
-                    >
-                        <Pencil className="mr-2 h-4 w-4" />
-                        Editar
-                    </Button>
-                    <Button
-                        variant="destructive"
-                        onClick={handleDeleteClick}
-                        disabled={showDeleteConfirm}
-                        className="flex-1"
-                    >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Excluir
-                    </Button>
-                </DialogFooter>
             </DialogContent>
         </Dialog>
     )
