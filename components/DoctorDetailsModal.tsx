@@ -20,10 +20,10 @@ export function DoctorDetailsModal({ doctor, isOpen, onClose }: DoctorDetailsMod
 
     if (!doctor) return null
 
-    // Filter schedules for this doctor
+    // Filter schedules
     const doctorSchedules = schedules.filter(s => s.doctor_id === doctor.id)
 
-    // Agrupamento Visual: Group by place, neighborhood and time
+    // Agrupamento Visual
     const groupedSchedules = doctorSchedules.reduce((acc, curr) => {
         const key = `${curr.place_name}-${curr.neighborhood_id}-${curr.start_time}-${curr.end_time}`
         if (!acc[key]) {
@@ -54,8 +54,8 @@ export function DoctorDetailsModal({ doctor, isOpen, onClose }: DoctorDetailsMod
         }
     }
 
-    // WHATSAPP INTEGRATION
-    const handleOpenWhatsApp = () => {
+    // WHATSAPP LÓGICA
+    const handleWhatsApp = () => {
         if (!doctor.phone) return
         const cleanNumber = doctor.phone.replace(/\D/g, '')
         const finalNumber = cleanNumber.length <= 11 ? `55${cleanNumber}` : cleanNumber
@@ -63,18 +63,18 @@ export function DoctorDetailsModal({ doctor, isOpen, onClose }: DoctorDetailsMod
     }
 
     const sortDays = (days: string[]) => {
-        const dayOrder = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
-        return days.sort((a, b) => dayOrder.indexOf(a.toLowerCase()) - dayOrder.indexOf(b.toLowerCase()))
+        const order = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
+        return days.sort((a, b) => order.indexOf(a.toLowerCase()) - order.indexOf(b.toLowerCase()))
     }
 
     const getShortDay = (day: string) => {
-        const shortNames: Record<string, string> = { "segunda": "Seg", "terça": "Ter", "quarta": "Qua", "quinta": "Qui", "sexta": "Sex", "sábado": "Sáb", "domingo": "Dom" }
-        return shortNames[day.toLowerCase()] || day
+        const map: Record<string, string> = { "segunda": "Seg", "terça": "Ter", "quarta": "Qua", "quinta": "Qui", "sexta": "Sex", "sábado": "Sáb", "domingo": "Dom" }
+        return map[day.toLowerCase()] || day
     }
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="max-h-[85vh] overflow-y-auto border-white/60 bg-white/95 backdrop-blur-2xl sm:max-w-md rounded-3xl p-6 shadow-2xl">
+            <DialogContent className="max-h-[90vh] overflow-y-auto border-white/60 bg-white/95 backdrop-blur-2xl sm:max-w-md rounded-3xl p-6 shadow-2xl">
                 <DialogHeader>
                     <div className="flex items-center gap-5">
                         <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#22c55e] to-[#16a34a] text-2xl font-medium text-white shadow-xl border-4 border-white/20">
@@ -98,44 +98,40 @@ export function DoctorDetailsModal({ doctor, isOpen, onClose }: DoctorDetailsMod
                     </div>
                 </DialogHeader>
 
-                {/* WHATSAPP ACTION */}
+                {/* BOTÃO WHATSAPP */}
                 {doctor.phone && (
                     <div className="mt-8">
                         <button
-                            onClick={handleOpenWhatsApp}
+                            onClick={handleWhatsApp}
                             className="flex w-full items-center justify-center gap-3 rounded-2xl bg-[#22c55e] py-4 text-sm font-medium text-white shadow-lg shadow-[#22c55e]/20 active:scale-95 transition-all"
                         >
                             <MessageCircle className="h-5 w-5" />
-                            Conversar no WhatsApp
+                            Iniciar Conversa no WhatsApp
                         </button>
                     </div>
                 )}
 
                 <div className="mt-8">
                     <h4 className="mb-4 text-[10px] font-medium uppercase tracking-widest text-gray-400">Escala de Atendimento</h4>
-                    {groupedList.length === 0 ? (
-                        <div className="rounded-2xl border border-dashed border-gray-100 bg-white/40 p-8 text-center"><p className="text-xs text-gray-400 font-medium">Nenhum local cadastrado</p></div>
-                    ) : (
-                        <div className="space-y-4">
-                            {groupedList.map((item, index) => (
-                                <div key={index} className="rounded-2xl border border-white/80 bg-white/60 p-4 shadow-sm backdrop-blur-sm">
-                                    <div className="flex items-start gap-3">
-                                        <div className="mt-0.5 rounded-full bg-[#22c55e]/10 p-2 text-[#22c55e]"><MapPin className="h-3.5 w-3.5" /></div>
-                                        <div className="flex-1">
-                                            <p className="text-sm font-medium text-gray-800">{item.place_name}</p>
-                                            <p className="text-[10px] font-medium text-gray-400 uppercase tracking-widest">{item.neighborhood_name || "Sem bairro"}</p>
-                                        </div>
-                                    </div>
-                                    <div className="mt-4 flex flex-col gap-3">
-                                        <div className="flex items-center gap-2 text-xs font-medium text-gray-600"><Clock className="h-3.5 w-3.5 text-[#22c55e]" /><span>{item.start_time.slice(0, 5)} — {item.end_time.slice(0, 5)}</span></div>
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {sortDays(item.days).map(day => (<span key={day} className="rounded-lg bg-gray-50 border border-gray-100 px-2 py-1 text-[9px] font-medium uppercase text-gray-500">{getShortDay(day)}</span>))}
-                                        </div>
+                    <div className="space-y-4">
+                        {groupedList.map((item, index) => (
+                            <div key={index} className="rounded-2xl border border-white/80 bg-white/60 p-4 shadow-sm backdrop-blur-sm">
+                                <div className="flex items-start gap-3">
+                                    <div className="mt-0.5 rounded-full bg-[#22c55e]/10 p-2 text-[#22c55e]"><MapPin className="h-3.5 w-3.5" /></div>
+                                    <div className="flex-1">
+                                        <p className="text-sm font-medium text-gray-800">{item.place_name}</p>
+                                        <p className="text-[10px] font-medium text-gray-400 uppercase tracking-widest">{item.neighborhood_name || "Sem bairro"}</p>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                    )}
+                                <div className="mt-4 flex flex-col gap-3">
+                                    <div className="flex items-center gap-2 text-xs font-medium text-gray-600"><Clock className="h-3.5 w-3.5 text-[#22c55e]" /><span>{item.start_time.slice(0, 5)} — {item.end_time.slice(0, 5)}</span></div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {sortDays(item.days).map(day => (<span key={day} className="rounded-lg bg-gray-50 border border-gray-100 px-2 py-1 text-[9px] font-medium uppercase text-gray-500">{getShortDay(day)}</span>))}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
 
                 {!showDeleteConfirm ? (
