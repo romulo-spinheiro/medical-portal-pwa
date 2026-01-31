@@ -55,7 +55,7 @@ function CadastroContent() {
     const [neighborhoods, setNeighborhoods] = useState<any[]>([])
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
 
-    // MÁSCARA DE TELEFONE
+    // MÁSCARA E FORMATAÇÃO DE TELEFONE
     const formatPhone = (val: string) => {
         const digits = val.replace(/\D/g, "").slice(0, 11)
         let masked = digits
@@ -72,7 +72,7 @@ function CadastroContent() {
         setPhone(formatPhone(e.target.value))
     }
 
-    // Carregar Especialidades e Bairros
+    // Carregar Auxiliares
     useEffect(() => {
         const fetchAux = async () => {
             const { data: s } = await supabase.from('specialties').select('*').order('name')
@@ -83,7 +83,7 @@ function CadastroContent() {
         fetchAux()
     }, [supabase])
 
-    // HIDRATAÇÃO BLINDADA (EVITA DUPLICIDADE NA CARGA)
+    // HIDRATAÇÃO (CARGA PARA EDIÇÃO)
     useEffect(() => {
         const fetchDoc = async () => {
             if (!editId) return
@@ -93,24 +93,17 @@ function CadastroContent() {
                 if (dr) {
                     setName(dr.name)
                     setCrm(dr.crm)
-                    setPhone(formatPhone(dr.phone || ""))
+                    setPhone(formatPhone(dr.phone || "")) // <--- HIDRATAÇÃO DO TELEFONE GARANTIDA
                     setSelectedSpecialtyId(dr.specialty_id)
                     setAvatarUrl(dr.avatar_url)
 
                     const { data: sch } = await supabase.from("schedules").select("*").eq("doctor_id", editId)
                     if (sch && sch.length > 0) {
-                        // Agrupar por chave única para evitar duplicidades no estado inicial
                         const grouped: Record<string, any> = {}
                         sch.forEach(s => {
-                            // Chave composta para identificar o mesmo local/horário
                             const key = `${s.place_name.trim()}-${s.neighborhood_id}-${s.start_time.slice(0, 5)}-${s.end_time.slice(0, 5)}`
-                            if (!grouped[key]) {
-                                grouped[key] = { ...s, days: [s.day_of_week] }
-                            } else {
-                                if (!grouped[key].days.includes(s.day_of_week)) {
-                                    grouped[key].days.push(s.day_of_week)
-                                }
-                            }
+                            if (!grouped[key]) grouped[key] = { ...s, days: [s.day_of_week] }
+                            else if (!grouped[key].days.includes(s.day_of_week)) grouped[key].days.push(s.day_of_week)
                         })
 
                         setSlots(Object.values(grouped).map((g, i) => ({
@@ -163,7 +156,7 @@ function CadastroContent() {
         }
     }
 
-    // SALVAMENTO ATÔMICO SEQUENCIAL
+    // SALVAMENTO ATÔMICO COM ATUALIZAÇÃO DE TELEFONE
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!user || isSubmitting) return
@@ -178,36 +171,38 @@ function CadastroContent() {
             const finalAvatar = avatarUrl || initials
             let doctor_id = editId
 
-            // PASSO 1: Salvar/Atualizar Médico
+            // PASSO 1: UPDATE/INSERT MÉDICO (Com telefone explícito)
             const docPayload = {
                 name,
                 crm,
-                phone: phone,
+                phone: phone, // <--- PERSISTÊNCIA DO TELEFONE GARANTIDA NO PAYLOAD
                 specialty_id: selectedSpecialtyId,
                 avatar_url: finalAvatar,
                 user_id: user.id
             }
 
             if (editId) {
-                const { error: updateError } = await supabase.from("doctors").update(docPayload).eq("id", editId)
+                const { error: updateError } = await supabase
+                    .from("doctors")
+                    .update(docPayload) // <--- ATUALIZAÇÃO EXPLÍCITA
+                    .eq("id", editId)
                 if (updateError) throw updateError
             } else {
-                const { data: newDoc, error: insertError } = await supabase.from("doctors").insert(docPayload).select().single()
+                const { data: newDoc, error: insertError } = await supabase
+                    .from("doctors")
+                    .insert(docPayload)
+                    .select()
+                    .single()
                 if (insertError) throw insertError
                 doctor_id = newDoc.id
             }
 
-            // PASSO 2: LIMPEZA TOTAL (SYCN) - Garantimos que o DELETE termina antes do INSERT
+            // PASSO 2: LIMPEZA DOS HORÁRIOS
             if (editId) {
-                const { error: deleteError } = await supabase
-                    .from("schedules")
-                    .delete()
-                    .eq("doctor_id", editId)
-
-                if (deleteError) throw deleteError
+                await supabase.from("schedules").delete().eq("doctor_id", editId)
             }
 
-            // PASSO 3: Inserir novos horários
+            // PASSO 3: INSERIR NOVOS HORÁRIOS
             const schedRows = slots.flatMap(s => s.days_of_week.map(day => ({
                 doctor_id,
                 place_name: s.place_name.trim(),
@@ -228,7 +223,7 @@ function CadastroContent() {
 
         } catch (err: any) {
             console.error("Save error:", err)
-            setErrors({ submit: "Erro ao salvar os dados: " + err.message })
+            setErrors({ submit: "Erro ao salvar informações: " + err.message })
         } finally {
             setIsSubmitting(false)
         }
@@ -243,7 +238,7 @@ function CadastroContent() {
                     <Link href="/" className="rounded-full bg-white/50 p-2 text-gray-500 border border-white/40"><ArrowLeft className="h-4 w-4" /></Link>
                     <div>
                         <h1 className="text-xl font-medium text-gray-800 tracking-tight">{editId ? "Ajustar Cadastro" : "Novo Profissional"}</h1>
-                        <p className="text-xs font-medium text-gray-400">Escalas e locais de atendimento</p>
+                        <p className="text-xs font-medium text-gray-400">Escalas e locais</p>
                     </div>
                 </div>
             </div>
@@ -252,17 +247,17 @@ function CadastroContent() {
                 {success && (
                     <div className="flex items-center gap-3 rounded-2xl bg-green-50 border border-green-100 p-4 text-[#22c55e]">
                         <CheckCircle className="h-5 w-5" />
-                        <span className="text-sm font-medium">Sucesso ao salvar profissional!</span>
+                        <span className="text-sm font-medium">Dados processados com sucesso!</span>
                     </div>
                 )}
                 {errors.submit && <div className="rounded-2xl bg-red-50 p-4 text-center text-xs font-medium text-red-600 border border-red-100">{errors.submit}</div>}
 
                 <div className="rounded-3xl border border-white/80 bg-white/60 p-6 shadow-xl shadow-gray-200/20 backdrop-blur-xl">
-                    <h2 className="mb-6 flex items-center gap-2 text-[10px] font-medium uppercase tracking-widest text-gray-400"><User className="h-3.5 w-3.5 text-[#22c55e]" />Informações Institucionais</h2>
+                    <h2 className="mb-6 flex items-center gap-2 text-[10px] font-medium uppercase tracking-widest text-gray-400"><User className="h-3.5 w-3.5 text-[#22c55e]" />Dados de Identificação</h2>
                     <div className="space-y-4">
                         <div className="space-y-1">
                             <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Nome Completo</label>
-                            <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full h-12 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none" />
+                            <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full h-12 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none" placeholder="Ex: Dr. Nome Sobrenome" />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1">
@@ -270,7 +265,7 @@ function CadastroContent() {
                                 <input type="text" value={crm} onChange={e => setCrm(e.target.value)} className="w-full h-12 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none" />
                             </div>
                             <div className="space-y-1">
-                                <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Telefone / WhatsApp</label>
+                                <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Telefone (WhatsApp)</label>
                                 <input type="text" value={phone} onChange={handlePhoneInput} className="w-full h-12 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none" placeholder="(00) 00000-0000" />
                             </div>
                         </div>
@@ -288,12 +283,12 @@ function CadastroContent() {
                 </div>
 
                 <div className="space-y-4">
-                    <h2 className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-widest text-gray-400 px-2"><Stethoscope className="h-3.5 w-3.5 text-[#22c55e]" />Grade de Atendimento</h2>
+                    <h2 className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-widest text-gray-400 px-2"><Stethoscope className="h-3.5 w-3.5 text-[#22c55e]" />Grade de Escalas</h2>
                     {slots.map(s => (
                         <div key={s.id} className="relative rounded-3xl border border-white/80 bg-white/60 p-6 shadow-lg shadow-gray-200/10 backdrop-blur-xl">
-                            {slots.length > 1 && <button type="button" onClick={() => removeSlot(s.id)} className="absolute right-4 top-4 text-gray-300 hover:text-red-400"><Trash2 className="h-4 w-4" /></button>}
+                            {slots.length > 1 && <button type="button" onClick={() => removeSlot(s.id)} className="absolute right-4 top-4 text-gray-300 hover:text-red-400 transition-colors"><Trash2 className="h-4 w-4" /></button>}
                             <div className="space-y-4">
-                                <div className="space-y-1"><label className="text-[10px] font-medium uppercase text-gray-400 px-1">Nome da Unidade</label><input type="text" value={s.place_name} onChange={e => updateSlot(s.id, "place_name", e.target.value)} className="w-full h-11 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium" /></div>
+                                <div className="space-y-1"><label className="text-[10px] font-medium uppercase text-gray-400 px-1">Local do Plantão</label><input type="text" value={s.place_name} onChange={e => updateSlot(s.id, "place_name", e.target.value)} className="w-full h-11 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium" /></div>
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Bairro</label>
                                     <div className="flex gap-2">
@@ -305,7 +300,7 @@ function CadastroContent() {
                                     </div>
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Dias da Semana</label>
+                                    <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Dias de Atendimento</label>
                                     <div className="flex flex-wrap gap-2">
                                         {DAYS_OF_WEEK.map(d => (
                                             <button key={d.value} type="button" onClick={() => toggleDay(s.id, d.value)} className={`rounded-xl px-4 py-2 text-[10px] font-medium uppercase transition-all ${s.days_of_week.includes(d.value) ? "bg-[#22c55e] text-white shadow-sm" : "bg-white/50 text-gray-400 border border-gray-100"}`}>{d.short}</button>
@@ -313,13 +308,13 @@ function CadastroContent() {
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-1"><label className="text-[10px] font-medium uppercase text-gray-400 px-1">Check-in</label><input type="time" value={s.start_time} onChange={e => updateSlot(s.id, "start_time", e.target.value)} className="w-full h-11 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium" /></div>
-                                    <div className="space-y-1"><label className="text-[10px] font-medium uppercase text-gray-400 px-1">Check-out</label><input type="time" value={s.end_time} onChange={e => updateSlot(s.id, "end_time", e.target.value)} className="w-full h-11 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium" /></div>
+                                    <div className="space-y-1"><label className="text-[10px] font-medium uppercase text-gray-400 px-1">Entrada</label><input type="time" value={s.start_time} onChange={e => updateSlot(s.id, "start_time", e.target.value)} className="w-full h-11 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium" /></div>
+                                    <div className="space-y-1"><label className="text-[10px] font-medium uppercase text-gray-400 px-1">Saída</label><input type="time" value={s.end_time} onChange={e => updateSlot(s.id, "end_time", e.target.value)} className="w-full h-11 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium" /></div>
                                 </div>
                             </div>
                         </div>
                     ))}
-                    <button type="button" onClick={addSlot} className="w-full h-14 rounded-2xl border-2 border-dashed border-gray-200 text-gray-400 text-xs font-medium bg-white/40 hover:bg-white transition-all">+ Novo Local de Plantão</button>
+                    <button type="button" onClick={addSlot} className="w-full h-14 rounded-2xl border-2 border-dashed border-gray-200 text-gray-400 text-xs font-medium bg-white/40 hover:bg-white transition-all">+ Adicionar Mais um Local</button>
                 </div>
 
                 <button type="submit" disabled={isSubmitting} className="w-full h-14 rounded-2xl bg-[#22c55e] text-white font-medium uppercase tracking-widest shadow-xl shadow-[#22c55e]/10 active:scale-95 disabled:opacity-50 flex items-center justify-center">
@@ -327,8 +322,8 @@ function CadastroContent() {
                 </button>
             </form>
 
-            <Dialog open={showSpecDialog} onOpenChange={setShowSpecDialog}><DialogContent className="rounded-3xl"><DialogHeader><DialogTitle className="font-medium">Nova Especialidade</DialogTitle></DialogHeader><Input placeholder="Ex: Ginecologia" value={newSpecName} onChange={e => setNewSpecName(e.target.value)} className="rounded-2xl h-12" /><DialogFooter className="flex gap-2"><Button variant="outline" onClick={() => setShowSpecDialog(false)} className="flex-1 rounded-2xl h-11">Cancelar</Button><Button onClick={handleAddSpec} className="flex-1 rounded-2xl bg-[#22c55e] h-11 text-white">Salvar</Button></DialogFooter></DialogContent></Dialog>
-            <Dialog open={!!showNeighDialog} onOpenChange={o => !o && setShowNeighDialog(null)}><DialogContent className="rounded-3xl"><DialogHeader><DialogTitle className="font-medium">Novo Bairro</DialogTitle></DialogHeader><Input placeholder="Ex: Centro" value={newNeighName} onChange={e => setNewNeighName(e.target.value)} className="rounded-2xl h-12" /><DialogFooter className="flex gap-2"><Button variant="outline" onClick={() => setShowNeighDialog(null)} className="flex-1 rounded-2xl h-11">Cancelar</Button><Button onClick={handleAddNeigh} className="flex-1 rounded-2xl bg-[#22c55e] h-11 text-white">Salvar</Button></DialogFooter></DialogContent></Dialog>
+            <Dialog open={showSpecDialog} onOpenChange={setShowSpecDialog}><DialogContent className="rounded-3xl"><DialogHeader><DialogTitle className="font-medium text-gray-800">Nova Especialidade</DialogTitle></DialogHeader><Input placeholder="Ex: Pediatria" value={newSpecName} onChange={e => setNewSpecName(e.target.value)} className="rounded-2xl h-12" /><DialogFooter className="flex gap-2"><Button variant="outline" onClick={() => setShowSpecDialog(false)} className="flex-1 rounded-2xl h-11">Cancelar</Button><Button onClick={handleAddSpec} className="flex-1 rounded-2xl bg-[#22c55e] h-11 text-white">Salvar</Button></DialogFooter></DialogContent></Dialog>
+            <Dialog open={!!showNeighDialog} onOpenChange={o => !o && setShowNeighDialog(null)}><DialogContent className="rounded-3xl"><DialogHeader><DialogTitle className="font-medium text-gray-800">Novo Bairro</DialogTitle></DialogHeader><Input placeholder="Ex: Santa Rosa" value={newNeighName} onChange={e => setNewNeighName(e.target.value)} className="rounded-2xl h-12" /><DialogFooter className="flex gap-2"><Button variant="outline" onClick={() => setShowNeighDialog(null)} className="flex-1 rounded-2xl h-11">Cancelar</Button><Button onClick={handleAddNeigh} className="flex-1 rounded-2xl bg-[#22c55e] h-11 text-white">Salvar</Button></DialogFooter></DialogContent></Dialog>
         </div>
     )
 }

@@ -42,10 +42,19 @@ export function HomeScreen() {
   const fetchProfileData = useCallback(async () => {
     if (!user) return
     try {
-      const { data } = await supabase.from('profiles').select('full_name, avatar_url').eq('id', user.id).single()
-      if (data) {
-        setUserName(data.full_name || user.user_metadata?.full_name || "Doutor(a)")
+      // 1. CORREÇÃO DO NOME: Busca explícita na tabela profiles
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name, avatar_url')
+        .eq('id', user.id)
+        .single()
+
+      if (data && data.full_name) {
+        setUserName(data.full_name)
         setAvatarUrl(data.avatar_url || null)
+      } else {
+        setUserName(user.user_metadata?.full_name || "Doutor(a)")
+        setAvatarUrl(user.user_metadata?.avatar_url || null)
       }
     } catch (err) {
       setUserName("Doutor(a)")
@@ -87,14 +96,12 @@ export function HomeScreen() {
 
   // LOGICA DE AGRUPAMENTO E DEDUPLICACAO DE HORARIOS INTERNOS
   const groupedSchedules = useMemo(() => {
-    // 1. Filtrar pelo dia/bairro selecionado
     const filtered = schedules.filter((s) => {
       const dayMatch = !selectedDay || s.day_of_week.toLowerCase() === selectedDay.toLowerCase()
       const neighMatch = selectedNeighborhood === "Todos" || s.neighborhood_name === selectedNeighborhood
       return dayMatch && neighMatch
     })
 
-    // 2. Agrupar por Médico E remover duplicatas internas de horário/local
     const groups = new Map<string, { doctor: Doctor, items: Schedule[] }>()
 
     filtered.forEach(item => {
@@ -105,7 +112,6 @@ export function HomeScreen() {
         groups.set(item.doctor_id, { doctor, items: [item] })
       } else {
         const group = groups.get(item.doctor_id)!
-        // Verifica se ja existe esse horario e local exato para este medico neste dia
         const isDuplicate = group.items.some(existing =>
           existing.start_time.slice(0, 5) === item.start_time.slice(0, 5) &&
           existing.end_time.slice(0, 5) === item.end_time.slice(0, 5) &&
@@ -137,13 +143,19 @@ export function HomeScreen() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button onClick={handleAvatarClick} disabled={isUploading} className="group relative h-11 w-11 shrink-0 rounded-full bg-gradient-to-br from-[#22c55e] to-[#16a34a] shadow-md border-2 border-white overflow-hidden active:scale-95 transition-transform">
-              {avatarUrl ? <img src={avatarUrl} className="h-full w-full object-cover" alt="" /> : <span className="text-white font-medium">{userName ? userName[0].toUpperCase() : "?"}</span>}
+              {avatarUrl ? (
+                <img src={avatarUrl} className="h-full w-full object-cover" alt="" />
+              ) : (
+                <span className="text-white font-medium">{userName ? userName[0].toUpperCase() : "?"}</span>
+              )}
               <div className={`absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 ${isUploading ? 'opacity-100' : ''}`}>
                 {isUploading ? <Loader2 className="h-4 w-4 animate-spin text-white" /> : <Camera className="h-4 w-4 text-white" />}
               </div>
             </button>
             <div>
-              <h1 className="text-lg font-medium text-gray-800 tracking-tight leading-tight">{getGreeting()}, <span className="text-[#22c55e]">{userName || "Doutor(a)"}</span></h1>
+              <h1 className="text-lg font-medium text-gray-800 tracking-tight leading-tight">
+                {getGreeting()}, <span className="text-[#22c55e]">{userName || "Doutor(a)"}</span>
+              </h1>
               <p className="text-[10px] font-medium uppercase tracking-widest text-gray-400">Roteiro Diário</p>
             </div>
           </div>
@@ -186,9 +198,15 @@ export function HomeScreen() {
               className="w-full rounded-3xl border border-white/80 bg-white/60 p-5 shadow-lg shadow-gray-200/20 backdrop-blur-xl text-left transition-all hover:bg-white/90 active:scale-[0.99]"
             >
               <div className="flex gap-4">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#22c55e] to-[#16a34a] text-lg font-medium text-white shadow-md border-2 border-white/20">
-                  {doctor.avatar_url ? <img src={doctor.avatar_url} className="h-full w-full object-cover rounded-2xl" alt="" /> : "?"}
+                {/* DOCTOR AVATAR FALLBACK: Círculo com inicial se não houver foto */}
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#22c55e] to-[#16a34a] text-lg font-medium text-white shadow-md border-2 border-white/20 overflow-hidden">
+                  {doctor.avatar_url && doctor.avatar_url.trim() !== "" ? (
+                    <img src={doctor.avatar_url} className="h-full w-full object-cover" alt="" />
+                  ) : (
+                    <span>{doctor.name.charAt(0).toUpperCase()}</span>
+                  )}
                 </div>
+
                 <div className="flex-1 space-y-0.5">
                   <h3 className="text-base font-medium text-gray-800 tracking-tight leading-tight">{doctor.name}</h3>
                   <p className="text-xs font-medium text-[#22c55e]">{doctor.specialty_name}</p>
