@@ -17,9 +17,13 @@ export default function AuthPage() {
     const [success, setSuccess] = useState("")
     const [isLoading, setIsLoading] = useState(false)
 
-    // Redirect if already logged in
+    React.useEffect(() => {
+        if (user) {
+            router.replace("/")
+        }
+    }, [user, router])
+
     if (user) {
-        router.replace("/")
         return null
     }
 
