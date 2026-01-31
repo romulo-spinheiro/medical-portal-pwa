@@ -239,7 +239,7 @@ export function HomeScreen() {
                     </div>
                     <div className="flex items-center gap-1.5 text-[10px] font-medium text-gray-400 uppercase tracking-widest">
                       <MapPin className="h-3 w-3" />
-                      <span>{s.place_name}</span>
+                      <span>{s.place_name} ({s.neighborhood_name})</span>
                     </div>
                   </div>
                 ))}
@@ -249,7 +249,6 @@ export function HomeScreen() {
         )}
       </div>
 
-      {/* Modal de Detalhes com Botão de WhatsApp Dinâmico */}
       <DoctorDetailsModal doctor={selectedDoctor} isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
     </div>
   )

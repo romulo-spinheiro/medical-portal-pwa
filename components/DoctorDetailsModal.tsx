@@ -1,4 +1,6 @@
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+"use client"
+
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { MapPin, Clock, Phone, Pencil, Trash2, Loader2, Contact, MessageCircle } from "lucide-react"
 import { Doctor, Schedule } from "@/context/app-context"
@@ -54,18 +56,11 @@ export function DoctorDetailsModal({ doctor, isOpen, onClose }: DoctorDetailsMod
         }
     }
 
-    // FUNÇÃO DINÂMICA DE LINK DO WHATSAPP
-    const getWhatsAppLink = (phone: string) => {
-        if (!phone) return ""
-        const cleanNumber = phone.replace(/\D/g, '')
-        // Adiciona 55 se o número tiver apenas 10 ou 11 dígitos (DDD + número)
-        const finalNumber = cleanNumber.length <= 11 ? `55${cleanNumber}` : cleanNumber
-        return `https://wa.me/${finalNumber}`
-    }
-
     const handleWhatsApp = () => {
-        const link = getWhatsAppLink(doctor.phone)
-        if (link) window.open(link, '_blank')
+        if (!doctor.phone) return
+        const cleanNumber = doctor.phone.replace(/\D/g, '') // LIMPEZA TOTAL DE QUALQUER CARACTER NÃO NUMÉRICO
+        const finalNumber = cleanNumber.length <= 11 ? `55${cleanNumber}` : cleanNumber
+        window.open(`https://wa.me/${finalNumber}`, '_blank')
     }
 
     const sortDays = (days: string[]) => {
@@ -84,7 +79,7 @@ export function DoctorDetailsModal({ doctor, isOpen, onClose }: DoctorDetailsMod
                 <DialogHeader>
                     <div className="flex items-center gap-5">
                         <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#22c55e] to-[#16a34a] text-2xl font-medium text-white shadow-xl border-4 border-white/20 overflow-hidden">
-                            {doctor.avatar_url && doctor.avatar_url.length > 5 ? (
+                            {doctor.avatar_url && doctor.avatar_url.trim().length > 5 ? (
                                 <img src={doctor.avatar_url} className="h-full w-full object-cover" alt="" />
                             ) : (
                                 <span>{doctor.name.charAt(0).toUpperCase()}</span>
@@ -116,7 +111,6 @@ export function DoctorDetailsModal({ doctor, isOpen, onClose }: DoctorDetailsMod
                     </div>
                 </DialogHeader>
 
-                {/* BOTÃO WHATSAPP DINÂMICO */}
                 {doctor.phone && (
                     <div className="mt-8">
                         <button
@@ -138,7 +132,7 @@ export function DoctorDetailsModal({ doctor, isOpen, onClose }: DoctorDetailsMod
                                     <div className="mt-0.5 rounded-full bg-[#22c55e]/10 p-2 text-[#22c55e]"><MapPin className="h-3.5 w-3.5" /></div>
                                     <div className="flex-1">
                                         <p className="text-sm font-medium text-gray-800">{item.place_name}</p>
-                                        <p className="text-[10px] font-medium text-gray-400 uppercase tracking-widest">{item.neighborhood_name || "Sem bairro"}</p>
+                                        <p className="text-[10px] font-medium text-gray-400 uppercase tracking-widest">({item.neighborhood_name || "Sem bairro"})</p>
                                     </div>
                                 </div>
                                 <div className="mt-4 flex flex-col gap-3">

@@ -3,7 +3,7 @@
 import React, { Suspense, useState, useEffect } from "react"
 import { useApp } from "@/context/app-context"
 import { useAuth } from "@/context/AuthContext"
-import { Plus, Trash2, CheckCircle, User, Stethoscope, Loader2, ArrowLeft } from "lucide-react"
+import { Plus, Trash2, CheckCircle, User, Stethoscope, Loader2, ArrowLeft, AlertCircle } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
@@ -32,7 +32,7 @@ interface ServiceSlot {
 }
 
 function CadastroContent() {
-    const { addSpecialty, addNeighborhood, loadData } = useApp()
+    const { specialties: globalSpecs, neighborhoods: globalNeighs, addSpecialty, addNeighborhood, loadData } = useApp()
     const { user, isLoading: isAuthLoading } = useAuth()
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -51,16 +51,16 @@ function CadastroContent() {
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [errors, setErrors] = useState<Record<string, string>>({})
     const [isLoadingData, setIsLoadingData] = useState(false)
-    const [specialties, setSpecialties] = useState<any[]>([])
-    const [neighborhoods, setNeighborhoods] = useState<any[]>([])
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
 
-    // MÁSCARA DE TELEFONE: (XX) XXXXX-XXXX
+    // CORREÇÃO: Função de máscara limpa de interferências (sem CCI links)
     const formatPhone = (val: string) => {
         if (!val) return ""
         const digits = val.replace(/\D/g, "").slice(0, 11)
         let masked = digits
-        if (digits.length > 2) masked = `(${digits.slice(0, 2)}) ${digits.slice(2)}`
+        if (digits.length > 2) {
+            masked = `(${digits.slice(0, 2)}) ${digits.slice(2)}`
+        }
         if (digits.length > 7 && digits.length <= 10) {
             masked = `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
         } else if (digits.length > 10) {
@@ -73,38 +73,43 @@ function CadastroContent() {
         setPhone(formatPhone(e.target.value))
     }
 
-    // Carregar dados iniciais
-    useEffect(() => {
-        const fetchAux = async () => {
-            const { data: s } = await supabase.from('specialties').select('*').order('name')
-            const { data: n } = await supabase.from('neighborhoods').select('*').order('name')
-            if (s) setSpecialties(s)
-            if (n) setNeighborhoods(n)
-        }
-        fetchAux()
-    }, [supabase])
-
-    // HIDRATAÇÃO DO FORMULÁRIO (EDICAO)
+    // Carregar dados existentes
     useEffect(() => {
         const fetchDoc = async () => {
-            if (!editId) return
+            if (!editId || !supabase) return
             setIsLoadingData(true)
             try {
-                const { data: dr, error } = await supabase.from("doctors").select("*").eq("id", editId).single()
+                const { data: dr, error: drError } = await supabase
+                    .from("doctors")
+                    .select("*")
+                    .eq("id", editId)
+                    .single()
+
+                if (drError) throw drError
+
                 if (dr) {
                     setName(dr.name || "")
                     setCrm(dr.crm || "")
-                    setPhone(formatPhone(dr.phone || "")) // CARREGA TELEFONE DO BANCO
+                    setPhone(formatPhone(dr.phone || ""))
                     setSelectedSpecialtyId(dr.specialty_id)
                     setAvatarUrl(dr.avatar_url)
 
-                    const { data: sch } = await supabase.from("schedules").select("*").eq("doctor_id", editId)
+                    const { data: sch, error: schError } = await supabase
+                        .from("schedules")
+                        .select("*")
+                        .eq("doctor_id", editId)
+
+                    if (schError) throw schError
+
                     if (sch && sch.length > 0) {
                         const grouped: Record<string, any> = {}
                         sch.forEach(s => {
-                            const key = `${s.place_name.trim()}-${s.neighborhood_id}-${s.start_time.slice(0, 5)}-${s.end_time.slice(0, 5)}`
-                            if (!grouped[key]) grouped[key] = { ...s, days: [s.day_of_week] }
-                            else if (!grouped[key].days.includes(s.day_of_week)) grouped[key].days.push(s.day_of_week)
+                            const key = `${s.place_name.trim()}-${s.neighborhood_id || ""}-${s.start_time.slice(0, 5)}-${s.end_time.slice(0, 5)}`
+                            if (!grouped[key]) {
+                                grouped[key] = { ...s, days: [s.day_of_week] }
+                            } else if (!grouped[key].days.includes(s.day_of_week)) {
+                                grouped[key].days.push(s.day_of_week)
+                            }
                         })
 
                         setSlots(Object.values(grouped).map((g, i) => ({
@@ -117,6 +122,9 @@ function CadastroContent() {
                         })))
                     }
                 }
+            } catch (err: any) {
+                console.error("Erro ao carregar médico:", err)
+                setErrors({ submit: "Erro ao carregar dados: " + err.message })
             } finally {
                 setIsLoadingData(false)
             }
@@ -129,82 +137,57 @@ function CadastroContent() {
     const addSlot = () => setSlots([...slots, { id: Date.now().toString(), place_name: "", neighborhood_id: null, days_of_week: [], start_time: "", end_time: "" }])
     const removeSlot = (id: string) => slots.length > 1 && setSlots(slots.filter(s => s.id !== id))
 
-    const [newSpecName, setNewSpecName] = useState("")
-    const [showSpecDialog, setShowSpecDialog] = useState(false)
-    const [newNeighName, setNewNeighName] = useState("")
-    const [showNeighDialog, setShowNeighDialog] = useState<string | null>(null)
-
-    const handleAddSpec = async () => {
-        if (!newSpecName.trim()) return
-        const { data } = await addSpecialty(newSpecName.trim())
-        if (data) {
-            setSpecialties([...specialties, data])
-            setSelectedSpecialtyId(Number(data.id))
-            setNewSpecName("")
-            setShowSpecDialog(false)
-        }
-    }
-
-    const handleAddNeigh = async () => {
-        const sid = showNeighDialog
-        if (!sid || !newNeighName.trim()) return
-        const { data } = await addNeighborhood(newNeighName.trim())
-        if (data) {
-            setNeighborhoods([...neighborhoods, data])
-            updateSlot(sid, "neighborhood_id", Number(data.id))
-            setNewNeighName("")
-            setShowNeighDialog(null)
-        }
-    }
-
-    // SALVAMENTO REAL E PERSISTENTE
+    // SALVAMENTO ATÔMICO COM LIMPEZA GARANTIDA
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!user || isSubmitting) return
 
-        setErrors({})
-        if (!name.trim()) { setErrors({ name: "Nome é obrigatório" }); return }
-        if (!selectedSpecialtyId) { setErrors({ specialty: "Especialidade é obrigatória" }); return }
-
         setIsSubmitting(true)
+        setErrors({})
+
         try {
-            const initials = name.split(" ").filter(Boolean).map(n => n[0]).join("").substring(0, 2).toUpperCase()
-            const finalAvatar = avatarUrl || initials
+            const finalPhone = phone.trim()
             let doctor_id = editId
 
-            // PAYLOAD COM TELEFONE EXPLÍCITO
-            const docPayload = {
+            const doctorPayload = {
                 name: name.trim(),
                 crm: crm.trim(),
-                phone: phone.trim(), // GARANTE QUE O VALOR DO INPUT SEJA ENVIADO
+                phone: finalPhone, // TELEFONE ATUALIZADO
                 specialty_id: selectedSpecialtyId,
-                avatar_url: finalAvatar,
-                user_id: user.id
+                avatar_url: avatarUrl || name.trim().charAt(0).toUpperCase()
             }
 
             if (editId) {
-                // UPDATE NO MÉDICO EXISTENTE
-                const { error: updateError } = await supabase
+                // 1. ATUALIZA MÉDICO
+                const { error: updError } = await supabase
                     .from("doctors")
-                    .update(docPayload)
+                    .update(doctorPayload)
                     .eq("id", editId)
-                if (updateError) throw updateError
+                    .eq("user_id", user.id) // Segurança adicional
+
+                if (updError) throw updError
+
+                // 2. LIMPEZA MANDATÓRIA (CRÍTICO: Resolve duplicação)
+                // Se o delete falhar, lançamos erro e não prosseguimos para o insert
+                const { error: delError } = await supabase
+                    .from("schedules")
+                    .delete()
+                    .eq("doctor_id", editId)
+
+                if (delError) throw delError
             } else {
                 // INSERT NOVO MÉDICO
-                const { data: newDoc, error: insertError } = await supabase
+                const { data: newDoc, error: insError } = await supabase
                     .from("doctors")
-                    .insert(docPayload)
+                    .insert({ ...doctorPayload, user_id: user.id })
                     .select()
                     .single()
-                if (insertError) throw insertError
+
+                if (insError) throw insError
                 doctor_id = newDoc.id
             }
 
-            // ATUALIZAÇÃO DOS HORÁRIOS (Schedules)
-            if (editId) {
-                await supabase.from("schedules").delete().eq("doctor_id", editId)
-            }
-
+            // 3. INSERE OS NOVOS HORÁRIOS DEFINIDOS NO FORMULÁRIO
             const schedRows = slots.flatMap(s => s.days_of_week.map(day => ({
                 doctor_id,
                 place_name: s.place_name.trim(),
@@ -215,23 +198,34 @@ function CadastroContent() {
             }))).filter(r => r.place_name && r.neighborhood_id && r.day_of_week)
 
             if (schedRows.length > 0) {
-                const { error: schedError } = await supabase.from("schedules").insert(schedRows)
+                const { error: schedError } = await supabase
+                    .from("schedules")
+                    .insert(schedRows)
+
                 if (schedError) throw schedError
             }
 
+            // 4. ATUALIZA O CONTEXTO GLOBAL E RETORNA
+            await loadData()
             setSuccess(true)
-            await loadData() // ATUALIZA O CONTEXTO GLOBAL COM OS NOVOS DADOS
-            setTimeout(() => router.push("/"), 1000)
+
+            // Pequeno delay para feedback visual de sucesso
+            setTimeout(() => {
+                router.push("/")
+                router.refresh() // Força o refresh da página de destino
+            }, 800)
 
         } catch (err: any) {
-            console.error("Erro no salvamento:", err)
-            setErrors({ submit: "Falha ao salvar: " + err.message })
+            console.error("Erro completo no salvamento:", err)
+            setErrors({ submit: "Falha ao gravar informações. Verifique sua conexão. Detalhe: " + (err.message || "Erro desconhecido") })
         } finally {
             setIsSubmitting(false)
         }
     }
 
-    if (isAuthLoading || isLoadingData) return <div className="flex h-screen items-center justify-center bg-gray-50"><Loader2 className="h-10 w-10 animate-spin text-[#22c55e]" /></div>
+    if (isAuthLoading || isLoadingData) {
+        return <div className="flex h-screen items-center justify-center bg-gray-50"><Loader2 className="h-10 w-10 animate-spin text-[#22c55e]" /></div>
+    }
 
     return (
         <div className="min-h-screen bg-gray-50/50 pb-24">
@@ -240,92 +234,105 @@ function CadastroContent() {
                     <Link href="/" className="rounded-full bg-white/50 p-2 text-gray-500 border border-white/40"><ArrowLeft className="h-4 w-4" /></Link>
                     <div>
                         <h1 className="text-xl font-medium text-gray-800 tracking-tight">{editId ? "Editar Profissional" : "Novo Cadastro"}</h1>
-                        <p className="text-xs font-medium text-gray-400">Dados cadastrais e escalas</p>
+                        <p className="text-xs font-medium text-gray-400">Gerencie dados e escalas</p>
                     </div>
                 </div>
             </div>
 
             <form onSubmit={handleSave} className="space-y-6 p-4 max-w-lg mx-auto">
                 {success && (
-                    <div className="flex items-center gap-3 rounded-2xl bg-green-50 border border-green-100 p-4 text-[#22c55e]">
+                    <div className="flex items-center gap-3 rounded-2xl bg-green-50 border border-green-100 p-4 text-[#22c55e] animate-in fade-in zoom-in duration-300">
                         <CheckCircle className="h-5 w-5" />
-                        <span className="text-sm font-medium">Dados atualizados com sucesso!</span>
+                        <span className="text-sm font-medium">Dados salvos com sucesso! Redirecionando...</span>
                     </div>
                 )}
-                {errors.submit && <div className="rounded-2xl bg-red-50 p-4 text-center text-xs font-medium text-red-600 border border-red-100">{errors.submit}</div>}
+
+                {errors.submit && (
+                    <div className="rounded-2xl bg-red-50 p-4 text-xs font-medium text-red-600 border border-red-100 flex items-start gap-3">
+                        <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                        <span>{errors.submit}</span>
+                    </div>
+                )}
 
                 <div className="rounded-3xl border border-white/80 bg-white/60 p-6 shadow-xl shadow-gray-200/20 backdrop-blur-xl">
-                    <h2 className="mb-6 flex items-center gap-2 text-[10px] font-medium uppercase tracking-widest text-gray-400"><User className="h-3.5 w-3.5 text-[#22c55e]" />Identificação</h2>
+                    <h2 className="mb-6 flex items-center gap-2 text-[10px] font-medium uppercase tracking-widest text-gray-400"><User className="h-3.5 w-3.5 text-[#22c55e]" />Informações Básicas</h2>
                     <div className="space-y-4">
                         <div className="space-y-1">
-                            <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Nome Completo</label>
-                            <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full h-12 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none" placeholder="Ex: Dr. Roberto Barros" />
+                            <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Nome</label>
+                            <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full h-12 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none focus:border-[#22c55e]/50 transition-colors" placeholder="Nome do médico" />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1">
                                 <label className="text-[10px] font-medium uppercase text-gray-400 px-1">CRM</label>
-                                <input type="text" value={crm} onChange={e => setCrm(e.target.value)} className="w-full h-12 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none" />
+                                <input type="text" value={crm} onChange={e => setCrm(e.target.value)} className="w-full h-12 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none focus:border-[#22c55e]/50 transition-colors" placeholder="00000-UF" />
                             </div>
                             <div className="space-y-1">
-                                <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Telefone (WhatsApp)</label>
-                                <input type="text" value={phone} onChange={handlePhoneInput} className="w-full h-12 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none" placeholder="(00) 00000-0000" />
+                                <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Telefone (WhastApp)</label>
+                                <input type="text" value={phone} onChange={handlePhoneInput} className="w-full h-12 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none focus:border-[#22c55e]/50 transition-colors" placeholder="(00) 00000-0000" />
                             </div>
                         </div>
                         <div className="space-y-1">
                             <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Especialidade</label>
-                            <div className="flex gap-2">
-                                <select value={selectedSpecialtyId ?? ""} onChange={e => setSelectedSpecialtyId(Number(e.target.value))} className="flex-1 h-12 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none appearance-none">
-                                    <option value="">Selecione...</option>
-                                    {specialties.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                </select>
-                                <button type="button" onClick={() => setShowSpecDialog(true)} className="rounded-2xl bg-[#22c55e]/5 px-4 text-[#22c55e] border border-[#22c55e]/10">+</button>
-                            </div>
+                            <select value={selectedSpecialtyId ?? ""} onChange={e => setSelectedSpecialtyId(Number(e.target.value))} className="w-full h-12 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none appearance-none bg-no-repeat bg-[right_1rem_center]">
+                                <option value="">Selecione...</option>
+                                {globalSpecs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                            </select>
                         </div>
                     </div>
                 </div>
 
                 <div className="space-y-4">
-                    <h2 className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-widest text-gray-400 px-2"><Stethoscope className="h-3.5 w-3.5 text-[#22c55e]" />Grade de Horários</h2>
+                    <h2 className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-widest text-gray-400 px-2"><Stethoscope className="h-3.5 w-3.5 text-[#22c55e]" />Grade de Escalas</h2>
                     {slots.map(s => (
-                        <div key={s.id} className="relative rounded-3xl border border-white/80 bg-white/60 p-6 shadow-lg shadow-gray-200/10 backdrop-blur-xl">
-                            {slots.length > 1 && <button type="button" onClick={() => removeSlot(s.id)} className="absolute right-4 top-4 text-gray-300 hover:text-red-400 transition-colors"><Trash2 className="h-4 w-4" /></button>}
+                        <div key={s.id} className="relative rounded-3xl border border-white/80 bg-white/60 p-6 shadow-lg shadow-gray-200/10 backdrop-blur-xl animate-in slide-in-from-bottom-2">
+                            {slots.length > 1 && (
+                                <button type="button" onClick={() => removeSlot(s.id)} className="absolute right-4 top-4 text-gray-300 hover:text-red-400 transition-colors">
+                                    <Trash2 className="h-4 w-4" />
+                                </button>
+                            )}
                             <div className="space-y-4">
-                                <div className="space-y-1"><label className="text-[10px] font-medium uppercase text-gray-400 px-1">Unidade / Local</label><input type="text" value={s.place_name} onChange={e => updateSlot(s.id, "place_name", e.target.value)} className="w-full h-11 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium" /></div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Local da Unidade</label>
+                                    <input type="text" value={s.place_name} onChange={e => updateSlot(s.id, "place_name", e.target.value)} className="w-full h-11 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none focus:border-[#22c55e]/50 transition-colors" placeholder="Ex: UPA Turu" />
+                                </div>
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Bairro</label>
-                                    <div className="flex gap-2">
-                                        <select value={s.neighborhood_id ?? ""} onChange={e => updateSlot(s.id, "neighborhood_id", Number(e.target.value))} className="flex-1 h-11 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium appearance-none">
-                                            <option value="">Selecione...</option>
-                                            {neighborhoods.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
-                                        </select>
-                                        <button type="button" onClick={() => setShowNeighDialog(s.id)} className="rounded-2xl bg-[#22c55e]/5 px-3 text-[#22c55e] border border-[#22c55e]/10">+</button>
-                                    </div>
+                                    <select value={s.neighborhood_id ?? ""} onChange={e => updateSlot(s.id, "neighborhood_id", Number(e.target.value))} className="w-full h-11 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none appearance-none">
+                                        <option value="">Selecione o bairro...</option>
+                                        {globalNeighs.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
+                                    </select>
                                 </div>
-                                <div className="space-y-2">
+                                <div className="space-y-1">
                                     <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Dias</label>
                                     <div className="flex flex-wrap gap-2">
                                         {DAYS_OF_WEEK.map(d => (
-                                            <button key={d.value} type="button" onClick={() => toggleDay(s.id, d.value)} className={`rounded-xl px-4 py-2 text-[10px] font-medium uppercase transition-all ${s.days_of_week.includes(d.value) ? "bg-[#22c55e] text-white shadow-sm" : "bg-white/50 text-gray-400 border border-gray-100 shadow-sm"}`}>{d.short}</button>
+                                            <button key={d.value} type="button" onClick={() => toggleDay(s.id, d.value)} className={`rounded-xl px-3 py-2 text-[10px] font-medium uppercase transition-all ${s.days_of_week.includes(d.value) ? "bg-[#22c55e] text-white shadow-sm" : "bg-white/50 text-gray-400 border border-gray-100 hover:bg-white"}`}>{d.short}</button>
                                         ))}
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-1"><label className="text-[10px] font-medium uppercase text-gray-400 px-1">Entrada</label><input type="time" value={s.start_time} onChange={e => updateSlot(s.id, "start_time", e.target.value)} className="w-full h-11 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium" /></div>
-                                    <div className="space-y-1"><label className="text-[10px] font-medium uppercase text-gray-400 px-1">Saída</label><input type="time" value={s.end_time} onChange={e => updateSlot(s.id, "end_time", e.target.value)} className="w-full h-11 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium" /></div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Início</label>
+                                        <input type="time" value={s.start_time} onChange={e => updateSlot(s.id, "start_time", e.target.value)} className="w-full h-11 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium" />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Fim</label>
+                                        <input type="time" value={s.end_time} onChange={e => updateSlot(s.id, "end_time", e.target.value)} className="w-full h-11 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium" />
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     ))}
-                    <button type="button" onClick={addSlot} className="w-full h-14 rounded-2xl border-2 border-dashed border-gray-200 text-gray-400 text-xs font-medium bg-white/40 hover:bg-white transition-all">+ Adicionar Outro Local</button>
+                    <button type="button" onClick={addSlot} className="w-full h-14 rounded-2xl border-2 border-dashed border-gray-200 text-gray-400 text-xs font-medium bg-white/40 hover:bg-white transition-all flex items-center justify-center gap-2">
+                        <Plus className="h-4 w-4" />
+                        Adicionar Novo Local
+                    </button>
                 </div>
 
-                <button type="submit" disabled={isSubmitting} className="w-full h-14 rounded-2xl bg-[#22c55e] text-white font-medium uppercase tracking-widest shadow-xl shadow-[#22c55e]/10 active:scale-95 disabled:opacity-50 flex items-center justify-center">
-                    {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : (editId ? "Salvar Alterações" : "Finalizar Cadastro")}
+                <button type="submit" disabled={isSubmitting} className="group relative w-full h-14 rounded-2xl bg-[#22c55e] text-white font-medium uppercase tracking-widest shadow-xl shadow-[#22c55e]/20 active:scale-[0.98] disabled:opacity-50 transition-all flex items-center justify-center overflow-hidden">
+                    {isSubmitting ? <Loader2 className="h-6 w-6 animate-spin" /> : (editId ? "Salvar Alterações" : "Concluir Cadastro")}
                 </button>
             </form>
-
-            <Dialog open={showSpecDialog} onOpenChange={setShowSpecDialog}><DialogContent className="rounded-3xl"><DialogHeader><DialogTitle className="font-medium text-gray-800">Nova Especialidade</DialogTitle></DialogHeader><Input placeholder="Ex: Ortopedia" value={newSpecName} onChange={e => setNewSpecName(e.target.value)} className="rounded-2xl h-12" /><DialogFooter className="flex gap-2"><Button variant="outline" onClick={() => setShowSpecDialog(false)} className="flex-1 rounded-2xl h-11">Cancelar</Button><Button onClick={handleAddSpec} className="flex-1 rounded-2xl bg-[#22c55e] h-11 text-white">Salvar</Button></DialogFooter></DialogContent></Dialog>
-            <Dialog open={!!showNeighDialog} onOpenChange={o => !o && setShowNeighDialog(null)}><DialogContent className="rounded-3xl"><DialogHeader><DialogTitle className="font-medium text-gray-800">Novo Bairro</DialogTitle></DialogHeader><Input placeholder="Ex: Centro" value={newNeighName} onChange={e => setNewNeighName(e.target.value)} className="rounded-2xl h-12" /><DialogFooter className="flex gap-2"><Button variant="outline" onClick={() => setShowNeighDialog(null)} className="flex-1 rounded-2xl h-11">Cancelar</Button><Button onClick={handleAddNeigh} className="flex-1 rounded-2xl bg-[#22c55e] h-11 text-white">Salvar</Button></DialogFooter></DialogContent></Dialog>
         </div>
     )
 }
