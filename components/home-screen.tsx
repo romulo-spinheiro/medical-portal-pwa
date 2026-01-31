@@ -26,6 +26,14 @@ export function HomeScreen() {
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
 
+  // Função para pegar as Iniciais (Ex: Romulo Pinheiro -> RP)
+  const getInitials = (name: string) => {
+    if (!name) return "?"
+    const parts = name.trim().split(" ").filter(Boolean)
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase()
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase()
+  }
+
   // Default to today
   useEffect(() => {
     if (!selectedDay) {
@@ -39,25 +47,24 @@ export function HomeScreen() {
     }
   }, [])
 
+  // 1. BUSCA EXPLICITA DO NOME DO USUÁRIO NA TABELA PROFILES
   const fetchProfileData = useCallback(async () => {
     if (!user) return
     try {
-      // 1. CORREÇÃO DO NOME: Busca explícita na tabela profiles
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
         .select('full_name, avatar_url')
         .eq('id', user.id)
         .single()
 
-      if (data && data.full_name) {
-        setUserName(data.full_name)
+      if (data) {
+        setUserName(data.full_name || user.user_metadata?.full_name || null)
         setAvatarUrl(data.avatar_url || null)
       } else {
-        setUserName(user.user_metadata?.full_name || "Doutor(a)")
-        setAvatarUrl(user.user_metadata?.avatar_url || null)
+        setUserName(user.user_metadata?.full_name || null)
       }
     } catch (err) {
-      setUserName("Doutor(a)")
+      console.error("Profile load error:", err)
     }
   }, [user, supabase])
 
@@ -94,7 +101,7 @@ export function HomeScreen() {
     return "Boa noite"
   }
 
-  // LOGICA DE AGRUPAMENTO E DEDUPLICACAO DE HORARIOS INTERNOS
+  // Lógica de agrupamento e deduplicação
   const groupedSchedules = useMemo(() => {
     const filtered = schedules.filter((s) => {
       const dayMatch = !selectedDay || s.day_of_week.toLowerCase() === selectedDay.toLowerCase()
@@ -118,10 +125,7 @@ export function HomeScreen() {
           existing.place_name === item.place_name &&
           existing.neighborhood_id === item.neighborhood_id
         )
-
-        if (!isDuplicate) {
-          group.items.push(item)
-        }
+        if (!isDuplicate) group.items.push(item)
       }
     })
 
@@ -186,10 +190,10 @@ export function HomeScreen() {
       </div>
 
       <div className="space-y-4 px-4">
-        <div className="px-1"><p className="text-[10px] font-medium uppercase tracking-widest text-gray-400">{groupedSchedules.length} {groupedSchedules.length === 1 ? "Profissional Disponível" : "Profissionais Disponíveis"}</p></div>
+        <div className="px-1"><p className="text-[10px] font-medium uppercase tracking-widest text-gray-400">{groupedSchedules.length} {groupedSchedules.length === 1 ? "Profissional hoje" : "Profissionais hoje"}</p></div>
 
         {groupedSchedules.length === 0 ? (
-          <div className="rounded-3xl border border-gray-100 bg-white/40 p-10 text-center backdrop-blur-xl"><p className="text-gray-400 font-medium text-sm">Nenhum atendimento para os filtros aplicados.</p></div>
+          <div className="rounded-3xl border border-gray-100 bg-white/40 p-10 text-center backdrop-blur-xl"><p className="text-gray-400 font-medium text-sm">Nenhum atendimento para os filtros.</p></div>
         ) : (
           groupedSchedules.map(({ doctor, items }) => (
             <button
@@ -198,12 +202,12 @@ export function HomeScreen() {
               className="w-full rounded-3xl border border-white/80 bg-white/60 p-5 shadow-lg shadow-gray-200/20 backdrop-blur-xl text-left transition-all hover:bg-white/90 active:scale-[0.99]"
             >
               <div className="flex gap-4">
-                {/* DOCTOR AVATAR FALLBACK: Círculo com inicial se não houver foto */}
+                {/* 2. AVATAR DO MÉDICO COM FALLBACK DE INICIAIS (RP) */}
                 <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#22c55e] to-[#16a34a] text-lg font-medium text-white shadow-md border-2 border-white/20 overflow-hidden">
-                  {doctor.avatar_url && doctor.avatar_url.trim() !== "" ? (
-                    <img src={doctor.avatar_url} className="h-full w-full object-cover" alt="" />
+                  {doctor.avatar_url && doctor.avatar_url.trim().length > 5 ? (
+                    <img src={doctor.avatar_url} className="h-full w-full object-cover" alt={doctor.name} />
                   ) : (
-                    <span>{doctor.name.charAt(0).toUpperCase()}</span>
+                    <span>{getInitials(doctor.name)}</span>
                   )}
                 </div>
 
