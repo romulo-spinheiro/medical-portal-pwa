@@ -87,30 +87,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const supabase = createClient()
 
+  // Load profile data from Auth metadata (NOT from profiles table to avoid 400)
   const loadProfile = useCallback(async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .single()
+      // Usa apenas os metadados do Auth (sem query na tabela profiles)
+      if (user) {
+        const metadataName = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0]
+        const metadataAvatar = user.user_metadata?.avatar_url || user.user_metadata?.picture
 
-      if (!error && data) {
         setProfile({
-          id: data.id,
-          name: data.full_name || data.name || "Usuário",
-          avatar: data.avatar || (data.full_name ? data.full_name[0] : "?"),
-          avatar_url: data.avatar_url,
+          id: userId,
+          name: metadataName || "Usuário",
+          avatar: metadataName ? metadataName[0].toUpperCase() : "?",
+          avatar_url: metadataAvatar || null,
         })
       } else {
-        console.log("[v0] Profile load error or no profile:", error?.message)
         setProfile(null)
       }
     } catch (err) {
-      console.log("[v0] Unexpected profile error:", err)
+      console.log("[loadProfile] Unexpected error:", err)
       setProfile(null)
     }
-  }, [supabase])
+  }, [user])
 
   // Specialties and Neighborhoods are GLOBAL (shared by all users) - no user_id filter
   const loadSpecialtiesAndNeighborhoods = useCallback(async () => {
@@ -147,72 +145,101 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     setAppDataLoading(true)
     try {
-      // Load doctors for current user with specialty name joined
+      // =====================================================================
+      // QUERY 1: Load ALL specialties (simple, no joins)
+      // =====================================================================
+      const { data: specsData } = await supabase
+        .from("specialties")
+        .select("id, name")
+        .order("name")
+
+      const loadedSpecialties = specsData || []
+      setSpecialties(loadedSpecialties)
+
+      // =====================================================================
+      // QUERY 2: Load ALL neighborhoods (simple, no joins)
+      // =====================================================================
+      const { data: neighsData } = await supabase
+        .from("neighborhoods")
+        .select("id, name")
+        .order("name")
+
+      const loadedNeighborhoods = neighsData || []
+      setNeighborhoods(loadedNeighborhoods)
+
+      // =====================================================================
+      // QUERY 3: Load doctors for current user (simple, no joins)
+      // =====================================================================
       const { data: doctorsData, error: doctorsError } = await supabase
         .from("doctors")
-        .select("*, specialties(name)")
+        .select("id, name, crm, phone, specialty_id, avatar_url, user_id")
         .eq("user_id", user.id)
         .order("name")
 
       if (doctorsError) {
-        console.log("[v0] Error loading doctors:", doctorsError.message)
+        console.log("[loadData] Error loading doctors:", doctorsError.message)
         setDoctors([])
         setSchedules([])
-      } else {
-        // Map the joined data to flatten specialty_name
-        const mappedDoctors = (doctorsData || []).map((d: Record<string, unknown>) => ({
-          id: d.id as string,
-          name: d.name as string,
-          specialty_id: d.specialty_id as number,
-          specialty_name: (d.specialties as { name: string } | null)?.name || "Sem especialidade",
-          crm: d.crm as string,
-          phone: d.phone as string || "", // Handle potential nulls
-          avatar_url: d.avatar_url as string,
-          user_id: d.user_id as string,
-        }))
-        setDoctors(mappedDoctors)
-
-        // Load schedules   r these doctors with neighborhood name joined
-        const doctorIds = mappedDoctors.map((d) => d.id)
-        if (doctorIds.length > 0) {
-          const { data: schedulesData, error: schedulesError } = await supabase
-            .from("schedules")
-            .select("*, neighborhoods(name)")
-            .in("doctor_id", doctorIds)
-
-          if (schedulesError) {
-            console.log("[v0] Error loading schedules:", schedulesError.message)
-            setSchedules([])
-          } else {
-            // Map the joined data to flatten neighborhood_name
-            const mappedSchedules = (schedulesData || []).map((s: Record<string, unknown>) => ({
-              id: s.id as string,
-              doctor_id: s.doctor_id as string,
-              place_name: s.place_name as string,
-              neighborhood_id: s.neighborhood_id as number,
-              neighborhood_name: (s.neighborhoods as { name: string } | null)?.name || "Sem bairro",
-              day_of_week: s.day_of_week as string,
-              start_time: s.start_time as string,
-              end_time: s.end_time as string,
-            }))
-            setSchedules(mappedSchedules)
-          }
-        } else {
-          setSchedules([])
-        }
+        return
       }
 
-      // Load specialties and neighborhoods (global, no user filter)
-      await loadSpecialtiesAndNeighborhoods()
+      // Map doctors with specialty names (from loaded data, not state)
+      const mappedDoctors = (doctorsData || []).map((d: any) => {
+        const specName = loadedSpecialties.find(s => Number(s.id) === d.specialty_id)?.name || "Sem especialidade"
+        return {
+          id: d.id,
+          name: d.name,
+          specialty_id: d.specialty_id,
+          specialty_name: specName,
+          crm: d.crm || "",
+          phone: d.phone || "",
+          avatar_url: d.avatar_url || "",
+          user_id: d.user_id,
+        }
+      })
+      setDoctors(mappedDoctors)
+
+      // =====================================================================
+      // QUERY 4: Load schedules for these doctors (simple, no joins)
+      // =====================================================================
+      const doctorIds = mappedDoctors.map((d: any) => d.id)
+      if (doctorIds.length > 0) {
+        const { data: schedulesData, error: schedulesError } = await supabase
+          .from("schedules")
+          .select("id, doctor_id, place_name, neighborhood_id, day_of_week, start_time, end_time")
+          .in("doctor_id", doctorIds)
+
+        if (schedulesError) {
+          console.log("[loadData] Error loading schedules:", schedulesError.message)
+          setSchedules([])
+        } else {
+          // Map schedules with neighborhood names (from loaded data, not state)
+          const mappedSchedules = (schedulesData || []).map((s: any) => {
+            const neighName = loadedNeighborhoods.find(n => Number(n.id) === s.neighborhood_id)?.name || "Sem bairro"
+            return {
+              id: s.id,
+              doctor_id: s.doctor_id,
+              place_name: s.place_name || "",
+              neighborhood_id: s.neighborhood_id,
+              neighborhood_name: neighName,
+              day_of_week: s.day_of_week || "",
+              start_time: s.start_time || "",
+              end_time: s.end_time || "",
+            }
+          })
+          setSchedules(mappedSchedules)
+        }
+      } else {
+        setSchedules([])
+      }
     } catch (err) {
-      console.log("[v0] Unexpected error loading data:", err)
-      // Set empty arrays so UI still works
+      console.log("[loadData] Unexpected error:", err)
       setDoctors([])
       setSchedules([])
     } finally {
       setAppDataLoading(false)
     }
-  }, [user, supabase, loadSpecialtiesAndNeighborhoods])
+  }, [user, supabase])
 
   // Load profile and user-specific data when user changes
   useEffect(() => {

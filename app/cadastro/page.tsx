@@ -1,6 +1,6 @@
 "use client"
 
-import React, { Suspense, useState, useEffect } from "react"
+import React, { Suspense, useState, useEffect, useCallback } from "react"
 import { useApp } from "@/context/app-context"
 import { useAuth } from "@/context/AuthContext"
 import { Plus, Trash2, CheckCircle, User, Stethoscope, Loader2, ArrowLeft, AlertCircle } from "lucide-react"
@@ -22,224 +22,449 @@ const DAYS_OF_WEEK = [
     { short: "Sab", value: "sábado" },
 ]
 
-interface ServiceSlot {
+interface LocationSlot {
     id: string
     place_name: string
     neighborhood_id: number | null
+    neighborhood_name: string
     days_of_week: string[]
     start_time: string
     end_time: string
 }
 
 function CadastroContent() {
-    const { specialties: globalSpecs, neighborhoods: globalNeighs, addSpecialty, addNeighborhood, loadData } = useApp()
+    const { addSpecialty, addNeighborhood, loadData } = useApp()
     const { user, isLoading: isAuthLoading } = useAuth()
     const router = useRouter()
     const searchParams = useSearchParams()
-    const editId = searchParams.get("id")
+    const doctorId = searchParams.get("id")
     const supabase = createClient()
 
+    // =========================================================================
+    // LOCAL DATA STATES (Carregados separadamente, sem depender do contexto)
+    // =========================================================================
+    const [allSpecialties, setAllSpecialties] = useState<any[]>([])
+    const [allNeighborhoods, setAllNeighborhoods] = useState<any[]>([])
+
+    // Form States
     const [name, setName] = useState("")
     const [crm, setCrm] = useState("")
     const [phone, setPhone] = useState("")
-    const [selectedSpecialtyId, setSelectedSpecialtyId] = useState<number | null>(null)
-    const [slots, setSlots] = useState<ServiceSlot[]>([
-        { id: "1", place_name: "", neighborhood_id: null, days_of_week: [], start_time: "", end_time: "" },
+    const [specialtyId, setSpecialtyId] = useState<string>("")
+    const [avatarUrl, setAvatarUrl] = useState<string>("")
+
+    // Locations State
+    const [locations, setLocations] = useState<LocationSlot[]>([
+        { id: "new-1", place_name: "", neighborhood_id: null, neighborhood_name: "", days_of_week: [], start_time: "", end_time: "" },
     ])
 
+    // Modal States
+    const [isSpecialtyModalOpen, setIsSpecialtyModalOpen] = useState(false)
+    const [newSpecialtyName, setNewSpecialtyName] = useState("")
+    const [isNeighborhoodModalOpen, setIsNeighborhoodModalOpen] = useState(false)
+    const [newNeighborhoodName, setNewNeighborhoodName] = useState("")
+
+    // UI States
     const [success, setSuccess] = useState(false)
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [errors, setErrors] = useState<Record<string, string>>({})
-    const [isLoadingData, setIsLoadingData] = useState(false)
-    const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+    const [isLoadingData, setIsLoadingData] = useState(true)
 
-    // CORREÇÃO: Função de máscara limpa de interferências (sem CCI links)
-    const formatPhone = (val: string) => {
+    // =========================================================================
+    // PHONE MASK
+    // =========================================================================
+    const formatPhone = (val: string): string => {
         if (!val) return ""
         const digits = val.replace(/\D/g, "").slice(0, 11)
-        let masked = digits
-        if (digits.length > 2) {
-            masked = `(${digits.slice(0, 2)}) ${digits.slice(2)}`
-        }
-        if (digits.length > 7 && digits.length <= 10) {
-            masked = `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
-        } else if (digits.length > 10) {
-            masked = `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
-        }
-        return masked
+        if (digits.length === 0) return ""
+        if (digits.length <= 2) return `(${digits}`
+        if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`
+        if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
+        return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
     }
 
     const handlePhoneInput = (e: React.ChangeEvent<HTMLInputElement>) => {
         setPhone(formatPhone(e.target.value))
     }
 
-    // Carregar dados existentes
-    useEffect(() => {
-        const fetchDoc = async () => {
-            if (!editId || !supabase) return
-            setIsLoadingData(true)
-            try {
-                const { data: dr, error: drError } = await supabase
+    // =========================================================================
+    // FETCH ALL DATA - Strategy: Completely Separate Queries (NO JOINS)
+    // =========================================================================
+    const fetchAllData = useCallback(async () => {
+        setIsLoadingData(true)
+        setErrors({})
+
+        try {
+            console.log("[fetchAllData] Starting data load...")
+
+            // =====================================================================
+            // QUERY 1: Load ALL specialties (simple, no joins)
+            // =====================================================================
+            const { data: specialtiesData, error: specialtiesError } = await supabase
+                .from("specialties")
+                .select("id, name")
+                .order("name")
+
+            if (specialtiesError) {
+                console.error("[fetchAllData] Specialties error:", specialtiesError)
+            } else {
+                setAllSpecialties(specialtiesData || [])
+                console.log("[fetchAllData] Specialties loaded:", specialtiesData?.length)
+            }
+
+            // =====================================================================
+            // QUERY 2: Load ALL neighborhoods (simple, no joins)
+            // =====================================================================
+            const { data: neighborhoodsData, error: neighborhoodsError } = await supabase
+                .from("neighborhoods")
+                .select("id, name")
+                .order("name")
+
+            if (neighborhoodsError) {
+                console.error("[fetchAllData] Neighborhoods error:", neighborhoodsError)
+            } else {
+                setAllNeighborhoods(neighborhoodsData || [])
+                console.log("[fetchAllData] Neighborhoods loaded:", neighborhoodsData?.length)
+            }
+
+            // =====================================================================
+            // QUERY 3: Load doctor data (if editing)
+            // =====================================================================
+            if (doctorId) {
+                console.log("[fetchAllData] Loading doctor:", doctorId)
+
+                const { data: doctorData, error: doctorError } = await supabase
                     .from("doctors")
-                    .select("*")
-                    .eq("id", editId)
+                    .select("id, name, crm, phone, specialty_id, avatar_url")
+                    .eq("id", doctorId)
                     .single()
 
-                if (drError) throw drError
+                if (doctorError) {
+                    console.error("[fetchAllData] Doctor error:", doctorError)
+                    setErrors({ submit: "Erro ao carregar médico: " + doctorError.message })
+                } else if (doctorData) {
+                    console.log("[fetchAllData] Doctor loaded:", doctorData)
 
-                if (dr) {
-                    setName(dr.name || "")
-                    setCrm(dr.crm || "")
-                    setPhone(formatPhone(dr.phone || ""))
-                    setSelectedSpecialtyId(dr.specialty_id)
-                    setAvatarUrl(dr.avatar_url)
+                    // Populate form fields
+                    setName(doctorData.name || "")
+                    setCrm(doctorData.crm || "")
+                    setPhone(formatPhone(doctorData.phone || ""))
+                    setSpecialtyId(doctorData.specialty_id?.toString() || "")
+                    setAvatarUrl(doctorData.avatar_url || "")
 
-                    const { data: sch, error: schError } = await supabase
+                    // =============================================================
+                    // QUERY 4: Load schedules for this doctor (simple, no joins)
+                    // =============================================================
+                    const { data: schedulesData, error: schedulesError } = await supabase
                         .from("schedules")
-                        .select("*")
-                        .eq("doctor_id", editId)
+                        .select("id, place_name, neighborhood_id, day_of_week, start_time, end_time")
+                        .eq("doctor_id", doctorId)
 
-                    if (schError) throw schError
+                    if (schedulesError) {
+                        console.error("[fetchAllData] Schedules error:", schedulesError)
+                    } else if (schedulesData && schedulesData.length > 0) {
+                        console.log("[fetchAllData] Schedules loaded:", schedulesData.length)
 
-                    if (sch && sch.length > 0) {
+                        // Group schedules by location+time (merge days)
                         const grouped: Record<string, any> = {}
-                        sch.forEach(s => {
-                            const key = `${s.place_name.trim()}-${s.neighborhood_id || ""}-${s.start_time.slice(0, 5)}-${s.end_time.slice(0, 5)}`
+
+                        schedulesData.forEach((s: any) => {
+                            const key = `${s.place_name || ""}-${s.neighborhood_id || ""}-${s.start_time || ""}-${s.end_time || ""}`
                             if (!grouped[key]) {
-                                grouped[key] = { ...s, days: [s.day_of_week] }
+                                // Find neighborhood name from local array
+                                const hood = (neighborhoodsData || []).find((n: any) => n.id === s.neighborhood_id)
+                                grouped[key] = {
+                                    place_name: s.place_name || "",
+                                    neighborhood_id: s.neighborhood_id,
+                                    neighborhood_name: hood?.name || "",
+                                    start_time: s.start_time?.slice(0, 5) || "",
+                                    end_time: s.end_time?.slice(0, 5) || "",
+                                    days: [s.day_of_week]
+                                }
                             } else if (!grouped[key].days.includes(s.day_of_week)) {
                                 grouped[key].days.push(s.day_of_week)
                             }
                         })
 
-                        setSlots(Object.values(grouped).map((g, i) => ({
-                            id: (i + 1).toString(),
+                        // Convert to array for state
+                        const formattedLocations = Object.values(grouped).map((g: any, i: number) => ({
+                            id: `loc-${i}-${Date.now()}`,
                             place_name: g.place_name,
                             neighborhood_id: g.neighborhood_id,
+                            neighborhood_name: g.neighborhood_name,
                             days_of_week: g.days,
-                            start_time: g.start_time.slice(0, 5),
-                            end_time: g.end_time.slice(0, 5),
-                        })))
+                            start_time: g.start_time,
+                            end_time: g.end_time,
+                        }))
+
+                        if (formattedLocations.length > 0) {
+                            setLocations(formattedLocations)
+                            console.log("[fetchAllData] Locations set:", formattedLocations)
+                        }
                     }
                 }
-            } catch (err: any) {
-                console.error("Erro ao carregar médico:", err)
-                setErrors({ submit: "Erro ao carregar dados: " + err.message })
-            } finally {
-                setIsLoadingData(false)
             }
+
+        } catch (err: any) {
+            console.error("[fetchAllData] Unexpected error:", err)
+            setErrors({ submit: "Erro inesperado: " + err.message })
+        } finally {
+            setIsLoadingData(false)
         }
-        fetchDoc()
-    }, [editId, supabase])
+    }, [doctorId, supabase])
 
-    const updateSlot = (id: string, field: keyof ServiceSlot, val: any) => setSlots(slots.map(s => s.id === id ? { ...s, [field]: val } : s))
-    const toggleDay = (id: string, day: string) => setSlots(slots.map(s => s.id === id ? { ...s, days_of_week: s.days_of_week.includes(day) ? s.days_of_week.filter(d => d !== day) : [...s.days_of_week, day] } : s))
-    const addSlot = () => setSlots([...slots, { id: Date.now().toString(), place_name: "", neighborhood_id: null, days_of_week: [], start_time: "", end_time: "" }])
-    const removeSlot = (id: string) => slots.length > 1 && setSlots(slots.filter(s => s.id !== id))
+    // Run fetch on mount
+    useEffect(() => {
+        fetchAllData()
+    }, [fetchAllData])
 
-    // SALVAMENTO ATÔMICO COM LIMPEZA GARANTIDA
-    const handleSave = async (e: React.FormEvent) => {
+    // =========================================================================
+    // LOCATION HANDLERS
+    // =========================================================================
+    const updateLocation = (index: number, field: keyof LocationSlot, value: any) => {
+        setLocations(prev => {
+            const updated = [...prev]
+            updated[index] = { ...updated[index], [field]: value }
+            return updated
+        })
+    }
+
+    const toggleDay = (index: number, day: string) => {
+        setLocations(prev => {
+            const updated = [...prev]
+            const currentDays = updated[index].days_of_week
+            updated[index] = {
+                ...updated[index],
+                days_of_week: currentDays.includes(day)
+                    ? currentDays.filter(d => d !== day)
+                    : [...currentDays, day]
+            }
+            return updated
+        })
+    }
+
+    const addLocation = () => {
+        setLocations(prev => [
+            ...prev,
+            { id: `new-${Date.now()}`, place_name: "", neighborhood_id: null, neighborhood_name: "", days_of_week: [], start_time: "", end_time: "" }
+        ])
+    }
+
+    const removeLocation = (index: number) => {
+        setLocations(prev => {
+            if (prev.length <= 1) return prev
+            return prev.filter((_, i) => i !== index)
+        })
+    }
+
+    // =========================================================================
+    // MODAL HANDLERS
+    // =========================================================================
+    const handleAddSpecialty = async () => {
+        if (!newSpecialtyName.trim()) return
+        const { data, error } = await addSpecialty(newSpecialtyName.trim())
+        if (!error && data) {
+            // Add to local array
+            setAllSpecialties(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)))
+            setNewSpecialtyName("")
+            setIsSpecialtyModalOpen(false)
+        } else {
+            alert("Erro ao adicionar especialidade: " + error)
+        }
+    }
+
+    const handleAddNeighborhood = async () => {
+        if (!newNeighborhoodName.trim()) return
+        const { data, error } = await addNeighborhood(newNeighborhoodName.trim())
+        if (!error && data) {
+            // Add to local array
+            setAllNeighborhoods(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)))
+            setNewNeighborhoodName("")
+            setIsNeighborhoodModalOpen(false)
+        } else {
+            alert("Erro ao adicionar bairro: " + error)
+        }
+    }
+
+    // =========================================================================
+    // SAVE DOCTOR - NUCLEAR STRATEGY (Update -> Delete All -> Insert New)
+    // =========================================================================
+    const saveDoctor = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!user || isSubmitting) return
 
         setIsSubmitting(true)
         setErrors({})
+        setSuccess(false)
+
+        // Clean phone (only digits)
+        const cleanPhone = phone.replace(/\D/g, "")
+
+        console.log("[saveDoctor] ========== STARTING SAVE ==========")
+        console.log("[saveDoctor] Doctor ID:", doctorId)
+        console.log("[saveDoctor] Name:", name)
+        console.log("[saveDoctor] CRM:", crm)
+        console.log("[saveDoctor] Phone (clean):", cleanPhone)
+        console.log("[saveDoctor] Specialty ID:", specialtyId)
+        console.log("[saveDoctor] Locations:", locations)
 
         try {
-            const finalPhone = phone.trim()
-            let doctor_id = editId
+            let finalDoctorId: string | null = doctorId
 
+            // =====================================================================
+            // STEP 1: UPDATE or INSERT Doctor
+            // =====================================================================
             const doctorPayload = {
                 name: name.trim(),
                 crm: crm.trim(),
-                phone: finalPhone, // TELEFONE ATUALIZADO
-                specialty_id: selectedSpecialtyId,
+                phone: cleanPhone, // <<< PHONE EXPLICITLY INCLUDED
+                specialty_id: specialtyId ? parseInt(specialtyId) : null,
                 avatar_url: avatarUrl || name.trim().charAt(0).toUpperCase()
             }
 
-            if (editId) {
-                // 1. ATUALIZA MÉDICO
-                const { error: updError } = await supabase
+            console.log("[saveDoctor] STEP 1 - Doctor payload:", doctorPayload)
+
+            if (doctorId) {
+                // EDIT MODE: UPDATE existing doctor
+                console.log("[saveDoctor] Updating existing doctor...")
+                const { error: updateError } = await supabase
                     .from("doctors")
                     .update(doctorPayload)
-                    .eq("id", editId)
-                    .eq("user_id", user.id) // Segurança adicional
+                    .eq("id", doctorId)
 
-                if (updError) throw updError
-
-                // 2. LIMPEZA MANDATÓRIA (CRÍTICO: Resolve duplicação)
-                // Se o delete falhar, lançamos erro e não prosseguimos para o insert
-                const { error: delError } = await supabase
-                    .from("schedules")
-                    .delete()
-                    .eq("doctor_id", editId)
-
-                if (delError) throw delError
+                if (updateError) {
+                    console.error("[saveDoctor] UPDATE ERROR:", updateError)
+                    throw new Error("Falha ao atualizar: " + updateError.message)
+                }
+                console.log("[saveDoctor] Doctor updated successfully!")
             } else {
-                // INSERT NOVO MÉDICO
-                const { data: newDoc, error: insError } = await supabase
+                // CREATE MODE: INSERT new doctor
+                console.log("[saveDoctor] Creating new doctor...")
+                const { data: newDoctor, error: insertError } = await supabase
                     .from("doctors")
                     .insert({ ...doctorPayload, user_id: user.id })
-                    .select()
+                    .select("id")
                     .single()
 
-                if (insError) throw insError
-                doctor_id = newDoc.id
+                if (insertError) {
+                    console.error("[saveDoctor] INSERT ERROR:", insertError)
+                    throw new Error("Falha ao criar: " + insertError.message)
+                }
+                finalDoctorId = newDoctor.id
+                console.log("[saveDoctor] Doctor created with ID:", finalDoctorId)
             }
 
-            // 3. INSERE OS NOVOS HORÁRIOS DEFINIDOS NO FORMULÁRIO
-            const schedRows = slots.flatMap(s => s.days_of_week.map(day => ({
-                doctor_id,
-                place_name: s.place_name.trim(),
-                neighborhood_id: s.neighborhood_id,
-                day_of_week: day,
-                start_time: s.start_time,
-                end_time: s.end_time
-            }))).filter(r => r.place_name && r.neighborhood_id && r.day_of_week)
-
-            if (schedRows.length > 0) {
-                const { error: schedError } = await supabase
+            // =====================================================================
+            // STEP 2: DELETE ALL existing schedules (NUCLEAR)
+            // =====================================================================
+            if (finalDoctorId) {
+                console.log("[saveDoctor] STEP 2 - Deleting old schedules...")
+                const { error: deleteError } = await supabase
                     .from("schedules")
-                    .insert(schedRows)
+                    .delete()
+                    .eq("doctor_id", finalDoctorId)
 
-                if (schedError) throw schedError
+                if (deleteError) {
+                    console.error("[saveDoctor] DELETE ERROR:", deleteError)
+                    throw new Error("Falha ao limpar escalas: " + deleteError.message)
+                }
+                console.log("[saveDoctor] Old schedules deleted!")
             }
 
-            // 4. ATUALIZA O CONTEXTO GLOBAL E RETORNA
+            // =====================================================================
+            // STEP 3: INSERT new schedules from current state
+            // =====================================================================
+            console.log("[saveDoctor] STEP 3 - Preparing new schedules...")
+
+            const schedulesToInsert = locations
+                .flatMap(loc =>
+                    loc.days_of_week.map(day => ({
+                        doctor_id: finalDoctorId,
+                        place_name: loc.place_name.trim(),
+                        neighborhood_id: loc.neighborhood_id,
+                        day_of_week: day,
+                        start_time: loc.start_time,
+                        end_time: loc.end_time
+                    }))
+                )
+                .filter(row =>
+                    row.place_name &&
+                    row.neighborhood_id &&
+                    row.day_of_week &&
+                    row.start_time &&
+                    row.end_time
+                )
+
+            console.log("[saveDoctor] Schedules to insert:", schedulesToInsert)
+
+            if (schedulesToInsert.length > 0) {
+                const { error: insertSchedulesError } = await supabase
+                    .from("schedules")
+                    .insert(schedulesToInsert)
+
+                if (insertSchedulesError) {
+                    console.error("[saveDoctor] INSERT SCHEDULES ERROR:", insertSchedulesError)
+                    throw new Error("Falha ao salvar escalas: " + insertSchedulesError.message)
+                }
+                console.log("[saveDoctor] Schedules inserted successfully!")
+            }
+
+            // =====================================================================
+            // SUCCESS
+            // =====================================================================
+            console.log("[saveDoctor] ========== SAVE COMPLETE ==========")
+
+            // Force reload of global context data before redirecting
             await loadData()
+
             setSuccess(true)
 
-            // Pequeno delay para feedback visual de sucesso
             setTimeout(() => {
                 router.push("/")
-                router.refresh() // Força o refresh da página de destino
-            }, 800)
+                router.refresh()
+            }, 1000)
 
         } catch (err: any) {
-            console.error("Erro completo no salvamento:", err)
-            setErrors({ submit: "Falha ao gravar informações. Verifique sua conexão. Detalhe: " + (err.message || "Erro desconhecido") })
+            console.error("[saveDoctor] FINAL ERROR:", err)
+            setErrors({ submit: err.message || "Erro ao salvar" })
         } finally {
             setIsSubmitting(false)
         }
     }
 
+    // =========================================================================
+    // LOADING STATE
+    // =========================================================================
     if (isAuthLoading || isLoadingData) {
-        return <div className="flex h-screen items-center justify-center bg-gray-50"><Loader2 className="h-10 w-10 animate-spin text-[#22c55e]" /></div>
+        return (
+            <div className="flex h-screen items-center justify-center bg-gray-50">
+                <Loader2 className="h-10 w-10 animate-spin text-[#22c55e]" />
+            </div>
+        )
     }
 
+    // =========================================================================
+    // RENDER
+    // =========================================================================
     return (
         <div className="min-h-screen bg-gray-50/50 pb-24">
+            {/* Header */}
             <div className="sticky top-0 z-40 border-b border-white/40 bg-white/30 px-4 pb-4 pt-6 backdrop-blur-xl">
                 <div className="flex items-center gap-4">
-                    <Link href="/" className="rounded-full bg-white/50 p-2 text-gray-500 border border-white/40"><ArrowLeft className="h-4 w-4" /></Link>
+                    <Link href="/" className="rounded-full bg-white/50 p-2 text-gray-500 border border-white/40">
+                        <ArrowLeft className="h-4 w-4" />
+                    </Link>
                     <div>
-                        <h1 className="text-xl font-medium text-gray-800 tracking-tight">{editId ? "Editar Profissional" : "Novo Cadastro"}</h1>
+                        <h1 className="text-xl font-medium text-gray-800 tracking-tight">
+                            {doctorId ? "Editar Profissional" : "Novo Cadastro"}
+                        </h1>
                         <p className="text-xs font-medium text-gray-400">Gerencie dados e escalas</p>
                     </div>
                 </div>
             </div>
 
-            <form onSubmit={handleSave} className="space-y-6 p-4 max-w-lg mx-auto">
+            <form onSubmit={saveDoctor} className="space-y-6 p-4 max-w-lg mx-auto">
+                {/* Success Message */}
                 {success && (
                     <div className="flex items-center gap-3 rounded-2xl bg-green-50 border border-green-100 p-4 text-[#22c55e] animate-in fade-in zoom-in duration-300">
                         <CheckCircle className="h-5 w-5" />
@@ -247,6 +472,7 @@ function CadastroContent() {
                     </div>
                 )}
 
+                {/* Error Message */}
                 {errors.submit && (
                     <div className="rounded-2xl bg-red-50 p-4 text-xs font-medium text-red-600 border border-red-100 flex items-start gap-3">
                         <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -254,84 +480,233 @@ function CadastroContent() {
                     </div>
                 )}
 
+                {/* Basic Info Card */}
                 <div className="rounded-3xl border border-white/80 bg-white/60 p-6 shadow-xl shadow-gray-200/20 backdrop-blur-xl">
-                    <h2 className="mb-6 flex items-center gap-2 text-[10px] font-medium uppercase tracking-widest text-gray-400"><User className="h-3.5 w-3.5 text-[#22c55e]" />Informações Básicas</h2>
+                    <h2 className="mb-6 flex items-center gap-2 text-[10px] font-medium uppercase tracking-widest text-gray-400">
+                        <User className="h-3.5 w-3.5 text-[#22c55e]" />
+                        Informações Básicas
+                    </h2>
                     <div className="space-y-4">
+                        {/* Name */}
                         <div className="space-y-1">
                             <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Nome</label>
-                            <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full h-12 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none focus:border-[#22c55e]/50 transition-colors" placeholder="Nome do médico" />
+                            <input
+                                type="text"
+                                value={name}
+                                onChange={e => setName(e.target.value)}
+                                className="w-full h-12 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none focus:border-[#22c55e]/50 transition-colors"
+                                placeholder="Nome do médico"
+                            />
                         </div>
+
+                        {/* CRM + Phone */}
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1">
                                 <label className="text-[10px] font-medium uppercase text-gray-400 px-1">CRM</label>
-                                <input type="text" value={crm} onChange={e => setCrm(e.target.value)} className="w-full h-12 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none focus:border-[#22c55e]/50 transition-colors" placeholder="00000-UF" />
+                                <input
+                                    type="text"
+                                    value={crm}
+                                    onChange={e => setCrm(e.target.value)}
+                                    className="w-full h-12 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none focus:border-[#22c55e]/50 transition-colors"
+                                    placeholder="00000-UF"
+                                />
                             </div>
                             <div className="space-y-1">
-                                <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Telefone (WhastApp)</label>
-                                <input type="text" value={phone} onChange={handlePhoneInput} className="w-full h-12 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none focus:border-[#22c55e]/50 transition-colors" placeholder="(00) 00000-0000" />
+                                <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Telefone (WhatsApp)</label>
+                                <input
+                                    type="text"
+                                    value={phone}
+                                    onChange={handlePhoneInput}
+                                    className="w-full h-12 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none focus:border-[#22c55e]/50 transition-colors"
+                                    placeholder="(00) 00000-0000"
+                                />
                             </div>
                         </div>
+
+                        {/* Specialty + Add Button */}
                         <div className="space-y-1">
                             <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Especialidade</label>
-                            <select value={selectedSpecialtyId ?? ""} onChange={e => setSelectedSpecialtyId(Number(e.target.value))} className="w-full h-12 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none appearance-none bg-no-repeat bg-[right_1rem_center]">
-                                <option value="">Selecione...</option>
-                                {globalSpecs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                            </select>
+                            <div className="flex items-center gap-2">
+                                <select
+                                    value={specialtyId}
+                                    onChange={e => setSpecialtyId(e.target.value)}
+                                    className="w-full h-12 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none appearance-none"
+                                >
+                                    <option value="">Selecione...</option>
+                                    {allSpecialties.map(s => (
+                                        <option key={s.id} value={s.id}>{s.name}</option>
+                                    ))}
+                                </select>
+                                <Button type="button" variant="outline" size="icon" onClick={() => setIsSpecialtyModalOpen(true)}>
+                                    <Plus className="h-4 w-4" />
+                                </Button>
+                            </div>
                         </div>
                     </div>
                 </div>
 
+                {/* Locations Section */}
                 <div className="space-y-4">
-                    <h2 className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-widest text-gray-400 px-2"><Stethoscope className="h-3.5 w-3.5 text-[#22c55e]" />Grade de Escalas</h2>
-                    {slots.map(s => (
-                        <div key={s.id} className="relative rounded-3xl border border-white/80 bg-white/60 p-6 shadow-lg shadow-gray-200/10 backdrop-blur-xl animate-in slide-in-from-bottom-2">
-                            {slots.length > 1 && (
-                                <button type="button" onClick={() => removeSlot(s.id)} className="absolute right-4 top-4 text-gray-300 hover:text-red-400 transition-colors">
+                    <h2 className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-widest text-gray-400 px-2">
+                        <Stethoscope className="h-3.5 w-3.5 text-[#22c55e]" />
+                        Grade de Escalas
+                    </h2>
+
+                    {locations.map((loc, index) => (
+                        <div
+                            key={loc.id}
+                            className="relative rounded-3xl border border-white/80 bg-white/60 p-6 shadow-lg shadow-gray-200/10 backdrop-blur-xl animate-in slide-in-from-bottom-2"
+                        >
+                            {/* Delete Button */}
+                            {locations.length > 1 && (
+                                <button
+                                    type="button"
+                                    onClick={() => removeLocation(index)}
+                                    className="absolute right-4 top-4 text-gray-300 hover:text-red-400 transition-colors"
+                                >
                                     <Trash2 className="h-4 w-4" />
                                 </button>
                             )}
+
                             <div className="space-y-4">
+                                {/* Place Name */}
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Local da Unidade</label>
-                                    <input type="text" value={s.place_name} onChange={e => updateSlot(s.id, "place_name", e.target.value)} className="w-full h-11 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none focus:border-[#22c55e]/50 transition-colors" placeholder="Ex: UPA Turu" />
+                                    <input
+                                        type="text"
+                                        value={loc.place_name}
+                                        onChange={e => updateLocation(index, "place_name", e.target.value)}
+                                        className="w-full h-11 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none focus:border-[#22c55e]/50 transition-colors"
+                                        placeholder="Ex: UPA Turu"
+                                    />
                                 </div>
+
+                                {/* Neighborhood + Add Button */}
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Bairro</label>
-                                    <select value={s.neighborhood_id ?? ""} onChange={e => updateSlot(s.id, "neighborhood_id", Number(e.target.value))} className="w-full h-11 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none appearance-none">
-                                        <option value="">Selecione o bairro...</option>
-                                        {globalNeighs.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
-                                    </select>
+                                    <div className="flex items-center gap-2">
+                                        <select
+                                            value={loc.neighborhood_id ?? ""}
+                                            onChange={e => updateLocation(index, "neighborhood_id", e.target.value ? parseInt(e.target.value) : null)}
+                                            className="w-full h-11 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium outline-none appearance-none"
+                                        >
+                                            <option value="">Selecione o bairro...</option>
+                                            {allNeighborhoods.map(n => (
+                                                <option key={n.id} value={n.id}>{n.name}</option>
+                                            ))}
+                                        </select>
+                                        <Button type="button" variant="outline" size="icon" onClick={() => setIsNeighborhoodModalOpen(true)}>
+                                            <Plus className="h-4 w-4" />
+                                        </Button>
+                                    </div>
                                 </div>
+
+                                {/* Days */}
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Dias</label>
                                     <div className="flex flex-wrap gap-2">
                                         {DAYS_OF_WEEK.map(d => (
-                                            <button key={d.value} type="button" onClick={() => toggleDay(s.id, d.value)} className={`rounded-xl px-3 py-2 text-[10px] font-medium uppercase transition-all ${s.days_of_week.includes(d.value) ? "bg-[#22c55e] text-white shadow-sm" : "bg-white/50 text-gray-400 border border-gray-100 hover:bg-white"}`}>{d.short}</button>
+                                            <button
+                                                key={d.value}
+                                                type="button"
+                                                onClick={() => toggleDay(index, d.value)}
+                                                className={`rounded-xl px-3 py-2 text-[10px] font-medium uppercase transition-all ${loc.days_of_week.includes(d.value)
+                                                    ? "bg-[#22c55e] text-white shadow-sm"
+                                                    : "bg-white/50 text-gray-400 border border-gray-100 hover:bg-white"
+                                                    }`}
+                                            >
+                                                {d.short}
+                                            </button>
                                         ))}
                                     </div>
                                 </div>
+
+                                {/* Time */}
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Início</label>
-                                        <input type="time" value={s.start_time} onChange={e => updateSlot(s.id, "start_time", e.target.value)} className="w-full h-11 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium" />
+                                        <input
+                                            type="time"
+                                            value={loc.start_time}
+                                            onChange={e => updateLocation(index, "start_time", e.target.value)}
+                                            className="w-full h-11 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium"
+                                        />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-medium uppercase text-gray-400 px-1">Fim</label>
-                                        <input type="time" value={s.end_time} onChange={e => updateSlot(s.id, "end_time", e.target.value)} className="w-full h-11 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium" />
+                                        <input
+                                            type="time"
+                                            value={loc.end_time}
+                                            onChange={e => updateLocation(index, "end_time", e.target.value)}
+                                            className="w-full h-11 rounded-2xl border border-gray-100 bg-white/80 px-4 text-sm font-medium"
+                                        />
                                     </div>
                                 </div>
                             </div>
                         </div>
                     ))}
-                    <button type="button" onClick={addSlot} className="w-full h-14 rounded-2xl border-2 border-dashed border-gray-200 text-gray-400 text-xs font-medium bg-white/40 hover:bg-white transition-all flex items-center justify-center gap-2">
+
+                    {/* Add Location Button */}
+                    <button
+                        type="button"
+                        onClick={addLocation}
+                        className="w-full h-14 rounded-2xl border-2 border-dashed border-gray-200 text-gray-400 text-xs font-medium bg-white/40 hover:bg-white transition-all flex items-center justify-center gap-2"
+                    >
                         <Plus className="h-4 w-4" />
                         Adicionar Novo Local
                     </button>
                 </div>
 
-                <button type="submit" disabled={isSubmitting} className="group relative w-full h-14 rounded-2xl bg-[#22c55e] text-white font-medium uppercase tracking-widest shadow-xl shadow-[#22c55e]/20 active:scale-[0.98] disabled:opacity-50 transition-all flex items-center justify-center overflow-hidden">
-                    {isSubmitting ? <Loader2 className="h-6 w-6 animate-spin" /> : (editId ? "Salvar Alterações" : "Concluir Cadastro")}
+                {/* Submit Button */}
+                <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="group relative w-full h-14 rounded-2xl bg-[#22c55e] text-white font-medium uppercase tracking-widest shadow-xl shadow-[#22c55e]/20 active:scale-[0.98] disabled:opacity-50 transition-all flex items-center justify-center overflow-hidden"
+                >
+                    {isSubmitting ? (
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                    ) : (
+                        doctorId ? "Salvar Alterações" : "Concluir Cadastro"
+                    )}
                 </button>
+
+                {/* Specialty Modal */}
+                <Dialog open={isSpecialtyModalOpen} onOpenChange={setIsSpecialtyModalOpen}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Nova Especialidade</DialogTitle>
+                        </DialogHeader>
+                        <div className="py-4">
+                            <Input
+                                placeholder="Nome da especialidade"
+                                value={newSpecialtyName}
+                                onChange={(e) => setNewSpecialtyName(e.target.value)}
+                            />
+                        </div>
+                        <DialogFooter>
+                            <Button onClick={handleAddSpecialty}>Salvar</Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Neighborhood Modal */}
+                <Dialog open={isNeighborhoodModalOpen} onOpenChange={setIsNeighborhoodModalOpen}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Novo Bairro</DialogTitle>
+                        </DialogHeader>
+                        <div className="py-4">
+                            <Input
+                                placeholder="Nome do bairro"
+                                value={newNeighborhoodName}
+                                onChange={(e) => setNewNeighborhoodName(e.target.value)}
+                            />
+                        </div>
+                        <DialogFooter>
+                            <Button onClick={handleAddNeighborhood}>Salvar</Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
             </form>
         </div>
     )

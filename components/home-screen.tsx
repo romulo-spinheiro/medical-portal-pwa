@@ -47,29 +47,22 @@ export function HomeScreen() {
     }
   }, [])
 
-  // 1. BUSCA O NOME REAL DO USUÁRIO NA TABELA PROFILES OU METADADOS
+  // 1. BUSCA O NOME REAL DO USUÁRIO DOS METADADOS DO AUTH (SEM USAR TABELA PROFILES)
   const fetchProfileData = useCallback(async () => {
     if (!user) return
     try {
-      // Prioridade 1: Tabela Profiles
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('full_name, avatar_url')
-        .eq('id', user.id)
-        .single()
+      // Usa apenas os metadados do Auth (Google/Email)
+      // NÃO usa a tabela profiles para evitar erro 400
+      const metadataName = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0]
+      setUserName(metadataName || "Doutor(a)")
 
-      if (data && data.full_name) {
-        setUserName(data.full_name)
-        setAvatarUrl(data.avatar_url || null)
-      } else {
-        // Fallback: Metadados do Auth (Google/Email)
-        const metadataName = user.user_metadata?.full_name || user.user_metadata?.name
-        setUserName(metadataName || null)
-      }
+      // Avatar do Auth (se disponível)
+      const metadataAvatar = user.user_metadata?.avatar_url || user.user_metadata?.picture
+      setAvatarUrl(metadataAvatar || null)
     } catch (err) {
-      console.error("Erro ao carregar perfil:", err)
+      console.error("Erro ao carregar dados do usuário:", err)
     }
-  }, [user, supabase])
+  }, [user])
 
   useEffect(() => {
     if (user) fetchProfileData()
@@ -86,8 +79,10 @@ export function HomeScreen() {
       const filePath = `${user.id}/avatar-${Date.now()}.${fileExt}`
       await supabase.storage.from('avatars').upload(filePath, file)
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath)
-      await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id)
+      // Não atualiza tabela profiles (não existe) - apenas define localmente
       setAvatarUrl(publicUrl)
+    } catch (err) {
+      console.error("Erro ao fazer upload:", err)
     } finally {
       setIsUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ""
