@@ -304,9 +304,6 @@ function CadastroContent() {
         const currentParams = new URLSearchParams(window.location.search)
         const currentDoctorId = currentParams.get("id")
 
-        console.log("[saveDoctor] START. ParamsID:", currentDoctorId, "BaseID:", doctorId)
-        console.log("[saveDoctor] Payload PRE:", { name, crm, phone: cleanPhone })
-
         try {
             let finalDoctorId: string | null = currentDoctorId || doctorId // Prefer fresh ID
 
@@ -334,7 +331,6 @@ function CadastroContent() {
                 }
             } else {
                 // CREATE MODE: INSERT new doctor
-                console.log("[saveDoctor] Data for INSERT:", { ...doctorPayload, user_id: user.id })
 
                 const { data: newDoctor, error: insertError } = await supabase
                     .from("doctors")
@@ -347,7 +343,6 @@ function CadastroContent() {
                     throw new Error("Falha ao criar: " + (insertError.message || JSON.stringify(insertError)))
                 }
                 finalDoctorId = newDoctor.id
-                console.log("[saveDoctor] Created ID:", finalDoctorId)
             }
 
             // =====================================================================
