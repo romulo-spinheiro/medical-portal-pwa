@@ -67,7 +67,7 @@ export default function AuthPage() {
     }
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#dcfce7] via-[#fce7f3] to-[#e0f2fe] p-4">
+        <div className="flex min-h-screen items-center justify-center bg-linear-to-br from-[#dcfce7] via-[#fce7f3] to-[#e0f2fe] p-4">
             <div className="w-full max-w-sm">
                 <div className="rounded-3xl border border-white/60 bg-white/40 p-8 shadow-lg backdrop-blur-xl">
                     <div className="mb-8 flex flex-col items-center">
