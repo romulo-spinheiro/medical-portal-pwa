@@ -146,7 +146,7 @@ export function HomeScreen() {
       <div className="sticky top-0 z-40 border-b border-white/40 bg-white/30 px-4 pb-4 pt-6 backdrop-blur-xl">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={handleAvatarClick} disabled={isUploading} className="group relative h-11 w-11 shrink-0 rounded-full bg-gradient-to-br from-[#22c55e] to-[#16a34a] shadow-md border-2 border-white overflow-hidden active:scale-95 transition-transform">
+            <button onClick={handleAvatarClick} disabled={isUploading} className="group relative h-11 w-11 shrink-0 rounded-full bg-linear-to-br from-[#22c55e] to-[#16a34a] shadow-md border-2 border-white overflow-hidden active:scale-95 transition-transform">
               {avatarUrl ? (
                 <img src={avatarUrl} className="h-full w-full object-cover" alt="" />
               ) : (

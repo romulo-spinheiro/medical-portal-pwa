@@ -78,7 +78,7 @@ export function DoctorDetailsModal({ doctor, isOpen, onClose }: DoctorDetailsMod
             <DialogContent className="max-h-[85vh] overflow-y-auto border-white/60 bg-white/95 backdrop-blur-2xl sm:max-w-md rounded-3xl p-6 shadow-2xl">
                 <DialogHeader>
                     <div className="flex items-center gap-5">
-                        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#22c55e] to-[#16a34a] text-2xl font-medium text-white shadow-xl border-4 border-white/20 overflow-hidden">
+                        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-[#22c55e] to-[#16a34a] text-2xl font-medium text-white shadow-xl border-4 border-white/20 overflow-hidden">
                             {doctor.avatar_url && doctor.avatar_url.trim().length > 5 ? (
                                 <img src={doctor.avatar_url} className="h-full w-full object-cover" alt="" />
                             ) : (
