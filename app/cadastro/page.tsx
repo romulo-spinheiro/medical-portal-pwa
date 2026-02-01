@@ -300,16 +300,15 @@ function CadastroContent() {
         // Clean phone (only digits)
         const cleanPhone = phone.replace(/\D/g, "")
 
-        console.log("[saveDoctor] ========== STARTING SAVE ==========")
-        console.log("[saveDoctor] Doctor ID:", doctorId)
-        console.log("[saveDoctor] Name:", name)
-        console.log("[saveDoctor] CRM:", crm)
-        console.log("[saveDoctor] Phone (clean):", cleanPhone)
-        console.log("[saveDoctor] Specialty ID:", specialtyId)
-        console.log("[saveDoctor] Locations:", locations)
+        // FORCE RE-READ ID FROM URL TO AVOID CLOSURE STALENESS
+        const currentParams = new URLSearchParams(window.location.search)
+        const currentDoctorId = currentParams.get("id")
+
+        console.log("[saveDoctor] START. ParamsID:", currentDoctorId, "BaseID:", doctorId)
+        console.log("[saveDoctor] Payload PRE:", { name, crm, phone: cleanPhone })
 
         try {
-            let finalDoctorId: string | null = doctorId
+            let finalDoctorId: string | null = currentDoctorId || doctorId // Prefer fresh ID
 
             // =====================================================================
             // STEP 1: UPDATE or INSERT Doctor
@@ -322,24 +321,21 @@ function CadastroContent() {
                 avatar_url: avatarUrl || name.trim().charAt(0).toUpperCase()
             }
 
-            console.log("[saveDoctor] STEP 1 - Doctor payload:", doctorPayload)
-
-            if (doctorId) {
+            if (finalDoctorId) {
                 // EDIT MODE: UPDATE existing doctor
-                console.log("[saveDoctor] Updating existing doctor...")
                 const { error: updateError } = await supabase
                     .from("doctors")
                     .update(doctorPayload)
-                    .eq("id", doctorId)
+                    .eq("id", finalDoctorId)
 
                 if (updateError) {
                     console.error("[saveDoctor] UPDATE ERROR:", updateError)
                     throw new Error("Falha ao atualizar: " + updateError.message)
                 }
-                console.log("[saveDoctor] Doctor updated successfully!")
             } else {
                 // CREATE MODE: INSERT new doctor
-                console.log("[saveDoctor] Creating new doctor...")
+                console.log("[saveDoctor] Data for INSERT:", { ...doctorPayload, user_id: user.id })
+
                 const { data: newDoctor, error: insertError } = await supabase
                     .from("doctors")
                     .insert({ ...doctorPayload, user_id: user.id })
@@ -347,41 +343,39 @@ function CadastroContent() {
                     .single()
 
                 if (insertError) {
-                    console.error("[saveDoctor] INSERT ERROR:", insertError)
-                    throw new Error("Falha ao criar: " + insertError.message)
+                    console.error("[saveDoctor] INSERT ERROR:", JSON.stringify(insertError, null, 2))
+                    throw new Error("Falha ao criar: " + (insertError.message || JSON.stringify(insertError)))
                 }
                 finalDoctorId = newDoctor.id
-                console.log("[saveDoctor] Doctor created with ID:", finalDoctorId)
+                console.log("[saveDoctor] Created ID:", finalDoctorId)
             }
 
             // =====================================================================
             // STEP 2: DELETE ALL existing schedules (NUCLEAR)
             // =====================================================================
             if (finalDoctorId) {
-                console.log("[saveDoctor] STEP 2 - Deleting old schedules...")
                 const { error: deleteError } = await supabase
                     .from("schedules")
                     .delete()
-                    .eq("doctor_id", finalDoctorId)
+                    .eq("doctor_id", parseInt(finalDoctorId))
 
                 if (deleteError) {
                     console.error("[saveDoctor] DELETE ERROR:", deleteError)
                     throw new Error("Falha ao limpar escalas: " + deleteError.message)
                 }
-                console.log("[saveDoctor] Old schedules deleted!")
             }
 
             // =====================================================================
             // STEP 3: INSERT new schedules from current state
             // =====================================================================
-            console.log("[saveDoctor] STEP 3 - Preparing new schedules...")
-
             const schedulesToInsert = locations
                 .flatMap(loc =>
                     loc.days_of_week.map(day => ({
                         doctor_id: finalDoctorId,
+                        user_id: user.id, // Ensure ownership
                         place_name: loc.place_name.trim(),
-                        neighborhood_id: loc.neighborhood_id,
+                        neighborhood: loc.neighborhood_name, // Provide fallback text
+                        neighborhood_id: loc.neighborhood_id ? Number(loc.neighborhood_id) : null,
                         day_of_week: day,
                         start_time: loc.start_time,
                         end_time: loc.end_time
@@ -395,24 +389,20 @@ function CadastroContent() {
                     row.end_time
                 )
 
-            console.log("[saveDoctor] Schedules to insert:", schedulesToInsert)
-
             if (schedulesToInsert.length > 0) {
                 const { error: insertSchedulesError } = await supabase
                     .from("schedules")
                     .insert(schedulesToInsert)
 
                 if (insertSchedulesError) {
-                    console.error("[saveDoctor] INSERT SCHEDULES ERROR:", insertSchedulesError)
-                    throw new Error("Falha ao salvar escalas: " + insertSchedulesError.message)
+                    console.error("[saveDoctor] INSERT SCHEDULES ERROR:", JSON.stringify(insertSchedulesError, null, 2))
+                    throw new Error("Falha ao salvar escalas: " + (insertSchedulesError.message || JSON.stringify(insertSchedulesError)))
                 }
-                console.log("[saveDoctor] Schedules inserted successfully!")
             }
 
             // =====================================================================
             // SUCCESS
             // =====================================================================
-            console.log("[saveDoctor] ========== SAVE COMPLETE ==========")
 
             // Force reload of global context data before redirecting
             await loadData()
