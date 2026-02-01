@@ -41,7 +41,7 @@ export function RegisterScreen() {
   const [success, setSuccess] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
-  
+
   // New specialty/neighborhood input states
   const [newSpecialty, setNewSpecialty] = useState("")
   const [newNeighborhood, setNewNeighborhood] = useState("")
@@ -49,7 +49,7 @@ export function RegisterScreen() {
   const [showNewNeighborhood, setShowNewNeighborhood] = useState<string | null>(null)
   const [isAddingSpecialty, setIsAddingSpecialty] = useState(false)
   const [isAddingNeighborhood, setIsAddingNeighborhood] = useState(false)
-  
+
   // Avatar upload
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
@@ -78,7 +78,7 @@ export function RegisterScreen() {
 
   const handleAddSpecialty = async () => {
     if (!newSpecialty.trim()) return
-    
+
     setIsAddingSpecialty(true)
     try {
       const result = await addSpecialty(newSpecialty.trim())
@@ -101,7 +101,7 @@ export function RegisterScreen() {
 
   const handleAddNeighborhood = async (slotId: string) => {
     if (!newNeighborhood.trim()) return
-    
+
     setIsAddingNeighborhood(true)
     try {
       const result = await addNeighborhood(newNeighborhood.trim())
@@ -277,7 +277,7 @@ export function RegisterScreen() {
               type="button"
               onClick={handleAvatarClick}
               disabled={isUploadingAvatar}
-              className="relative h-14 w-14 overflow-hidden rounded-full border-2 border-white/60 bg-gradient-to-br from-[#22c55e] to-[#16a34a] shadow-lg transition-all hover:scale-105 focus:outline-none focus:ring-2 focus:ring-[#22c55e]/50"
+              className="relative h-14 w-14 overflow-hidden rounded-full border-2 border-white/60 bg-linear-to-br from-[#22c55e] to-[#16a34a] shadow-lg transition-all hover:scale-105 focus:outline-none focus:ring-2 focus:ring-[#22c55e]/50"
             >
               {profile?.avatar_url ? (
                 <img
@@ -348,9 +348,8 @@ export function RegisterScreen() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Dr. João da Silva"
-                className={`w-full rounded-xl border bg-white/50 px-4 py-3 text-gray-800 placeholder-gray-400 backdrop-blur-sm transition-all focus:bg-white/70 focus:outline-none focus:ring-2 focus:ring-[#22c55e]/20 ${
-                  errors.name ? "border-red-400" : "border-white/60"
-                }`}
+                className={`w-full rounded-xl border bg-white/50 px-4 py-3 text-gray-800 placeholder-gray-400 backdrop-blur-sm transition-all focus:bg-white/70 focus:outline-none focus:ring-2 focus:ring-[#22c55e]/20 ${errors.name ? "border-red-400" : "border-white/60"
+                  }`}
               />
               {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name}</p>}
             </div>
@@ -365,9 +364,8 @@ export function RegisterScreen() {
                 value={crm}
                 onChange={(e) => setCrm(e.target.value)}
                 placeholder="12345-MA"
-                className={`w-full rounded-xl border bg-white/50 px-4 py-3 text-gray-800 placeholder-gray-400 backdrop-blur-sm transition-all focus:bg-white/70 focus:outline-none focus:ring-2 focus:ring-[#22c55e]/20 ${
-                  errors.crm ? "border-red-400" : "border-white/60"
-                }`}
+                className={`w-full rounded-xl border bg-white/50 px-4 py-3 text-gray-800 placeholder-gray-400 backdrop-blur-sm transition-all focus:bg-white/70 focus:outline-none focus:ring-2 focus:ring-[#22c55e]/20 ${errors.crm ? "border-red-400" : "border-white/60"
+                  }`}
               />
               {errors.crm && <p className="mt-1 text-xs text-red-500">{errors.crm}</p>}
             </div>
@@ -416,13 +414,12 @@ export function RegisterScreen() {
                     <select
                       value={selectedSpecialtyId ?? ""}
                       onChange={(e) => setSelectedSpecialtyId(e.target.value ? Number(e.target.value) : null)}
-                      className={`flex-1 rounded-xl border bg-white/50 px-4 py-3 text-gray-800 backdrop-blur-sm transition-all focus:bg-white/70 focus:outline-none focus:ring-2 focus:ring-[#22c55e]/20 ${
-                        errors.specialty ? "border-red-400" : "border-white/60"
-                      }`}
+                      className={`flex-1 rounded-xl border bg-white/50 px-4 py-3 text-gray-800 backdrop-blur-sm transition-all focus:bg-white/70 focus:outline-none focus:ring-2 focus:ring-[#22c55e]/20 ${errors.specialty ? "border-red-400" : "border-white/60"
+                        }`}
                     >
                       <option value="">
-                        {specialties.length === 0 
-                          ? "Nenhuma especialidade cadastrada" 
+                        {specialties.length === 0
+                          ? "Nenhuma especialidade cadastrada"
                           : "Selecione uma especialidade"}
                       </option>
                       {specialties.map((spec) => (
@@ -486,9 +483,8 @@ export function RegisterScreen() {
                     value={slot.place_name}
                     onChange={(e) => updateSlot(slot.id, "place_name", e.target.value)}
                     placeholder="Nome do Local (ex: Clínica Central)"
-                    className={`w-full rounded-xl border bg-white/50 px-4 py-2.5 text-sm text-gray-800 placeholder-gray-400 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-[#22c55e]/20 ${
-                      errors[`slot-${index}-place_name`] ? "border-red-400" : "border-white/60"
-                    }`}
+                    className={`w-full rounded-xl border bg-white/50 px-4 py-2.5 text-sm text-gray-800 placeholder-gray-400 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-[#22c55e]/20 ${errors[`slot-${index}-place_name`] ? "border-red-400" : "border-white/60"
+                      }`}
                   />
 
                   {/* Neighborhood */}
@@ -531,13 +527,12 @@ export function RegisterScreen() {
                         <select
                           value={slot.neighborhood_id ?? ""}
                           onChange={(e) => updateSlot(slot.id, "neighborhood_id", e.target.value ? Number(e.target.value) : null)}
-                          className={`flex-1 rounded-xl border bg-white/50 px-4 py-2.5 text-sm text-gray-800 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-[#22c55e]/20 ${
-                            errors[`slot-${index}-neighborhood`] ? "border-red-400" : "border-white/60"
-                          }`}
+                          className={`flex-1 rounded-xl border bg-white/50 px-4 py-2.5 text-sm text-gray-800 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-[#22c55e]/20 ${errors[`slot-${index}-neighborhood`] ? "border-red-400" : "border-white/60"
+                            }`}
                         >
                           <option value="">
-                            {neighborhoods.length === 0 
-                              ? "Nenhum bairro cadastrado" 
+                            {neighborhoods.length === 0
+                              ? "Nenhum bairro cadastrado"
                               : "Selecione o bairro"}
                           </option>
                           {neighborhoods.map((n) => (
@@ -574,15 +569,13 @@ export function RegisterScreen() {
                             key={day.value}
                             type="button"
                             onClick={() => toggleDay(slot.id, day.value)}
-                            className={`rounded-full px-4 py-2 text-sm font-medium transition-all ${
-                              isSelected
+                            className={`rounded-full px-4 py-2 text-sm font-medium transition-all ${isSelected
                                 ? "bg-[#22c55e] text-white shadow-md"
                                 : "border border-white/60 bg-white/50 text-gray-600 hover:bg-white/70"
-                            } ${
-                              errors[`slot-${index}-days_of_week`] && !isSelected
+                              } ${errors[`slot-${index}-days_of_week`] && !isSelected
                                 ? "border-red-300"
                                 : ""
-                            }`}
+                              }`}
                           >
                             {day.short}
                           </button>
@@ -602,11 +595,10 @@ export function RegisterScreen() {
                         type="time"
                         value={slot.start_time}
                         onChange={(e) => updateSlot(slot.id, "start_time", e.target.value)}
-                        className={`w-full rounded-xl border bg-white/50 px-3 py-2.5 text-sm text-gray-800 backdrop-blur-sm transition-all focus:bg-white/70 focus:outline-none focus:ring-2 focus:ring-[#22c55e]/20 ${
-                          errors[`slot-${index}-start_time`]
+                        className={`w-full rounded-xl border bg-white/50 px-3 py-2.5 text-sm text-gray-800 backdrop-blur-sm transition-all focus:bg-white/70 focus:outline-none focus:ring-2 focus:ring-[#22c55e]/20 ${errors[`slot-${index}-start_time`]
                             ? "border-red-400"
                             : "border-white/60"
-                        }`}
+                          }`}
                       />
                     </div>
                     <div>
@@ -615,11 +607,10 @@ export function RegisterScreen() {
                         type="time"
                         value={slot.end_time}
                         onChange={(e) => updateSlot(slot.id, "end_time", e.target.value)}
-                        className={`w-full rounded-xl border bg-white/50 px-3 py-2.5 text-sm text-gray-800 backdrop-blur-sm transition-all focus:bg-white/70 focus:outline-none focus:ring-2 focus:ring-[#22c55e]/20 ${
-                          errors[`slot-${index}-end_time`]
+                        className={`w-full rounded-xl border bg-white/50 px-3 py-2.5 text-sm text-gray-800 backdrop-blur-sm transition-all focus:bg-white/70 focus:outline-none focus:ring-2 focus:ring-[#22c55e]/20 ${errors[`slot-${index}-end_time`]
                             ? "border-red-400"
                             : "border-white/60"
-                        }`}
+                          }`}
                       />
                     </div>
                   </div>
