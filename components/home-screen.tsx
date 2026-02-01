@@ -202,7 +202,7 @@ export function HomeScreen() {
               className="w-full rounded-3xl border border-white/80 bg-white/60 p-5 shadow-lg shadow-gray-200/20 backdrop-blur-xl text-left transition-all hover:bg-white/90 active:scale-[0.99]"
             >
               <div className="flex gap-4">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#22c55e] to-[#16a34a] text-lg font-medium text-white shadow-md border-2 border-white/20 overflow-hidden">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-[#22c55e] to-[#16a34a] text-lg font-medium text-white shadow-md border-2 border-white/20 overflow-hidden">
                   {doctor.avatar_url && doctor.avatar_url.trim().length > 5 ? (
                     <img src={doctor.avatar_url} className="h-full w-full object-cover" alt={doctor.name} />
                   ) : (
